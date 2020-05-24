@@ -58,7 +58,7 @@ static int update_with_time(void *data, uint64_t curr_time)
         state->current_timeout = UINT64_MAX;
         error = tqueue_update(&state->timeouts, curr_time, &next_time);
         if (error) {
-            ZF_LOGE("timeout update failed");
+            ZF_LOGE("timeout update failed, code %d", error);
             return error;
         }
 
@@ -92,6 +92,7 @@ static int register_cb(void *data, timeout_type_t type, uint64_t ns,
 
     int error = get_time(data, &curr_time);
     if (error) {
+        ZF_LOGE("get_time() failed, code %d", error);
         return error;
     }
 
@@ -111,10 +112,12 @@ static int register_cb(void *data, timeout_type_t type, uint64_t ns,
         timeout.period = ns;
         break;
     default:
+        ZF_LOGE("invalid type %d", type);
         return EINVAL;
     }
 
     if (timeout.abs_time < curr_time) {
+        ZF_LOGE("absolute timeout is in the past");
         return ETIME;
     }
 
@@ -122,6 +125,7 @@ static int register_cb(void *data, timeout_type_t type, uint64_t ns,
     timeout.callback = callback;
     error = tqueue_register(&state->timeouts, id, &timeout);
     if (error) {
+        ZF_LOGE("tqueue_register() failed, code %d", error);
         return error;
     }
 
@@ -161,6 +165,7 @@ static int deregister_cb(void *data, uint32_t id)
 int tm_init(time_manager_t *tm, ltimer_t *ltimer, ps_io_ops_t *ops, int size) {
 
     if (!tm || !ltimer) {
+        ZF_LOGE("invalid parameters");
         return EINVAL;
     }
 
@@ -174,6 +179,7 @@ int tm_init(time_manager_t *tm, ltimer_t *ltimer, ps_io_ops_t *ops, int size) {
 
     int error = ps_calloc(&ops->malloc_ops, 1, sizeof(time_man_state_t), &tm->data);
     if (error) {
+        ZF_LOGE("ps_calloc() failed, code %d", error);
         return error;
     }
 
@@ -181,9 +187,11 @@ int tm_init(time_manager_t *tm, ltimer_t *ltimer, ps_io_ops_t *ops, int size) {
     state->ltimer = ltimer;
     state->current_timeout = UINT64_MAX;
     error = tqueue_init_static(&state->timeouts, &ops->malloc_ops, size);
-
     if (error) {
+        ZF_LOGE("tqueue_init_static() failed, code %d", error);
         ps_free(&ops->malloc_ops, sizeof(time_man_state_t), &tm->data);
+        return error;
     }
-    return error;
+
+    return 0;
 }
