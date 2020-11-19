@@ -486,7 +486,7 @@ ethif_imx6_init(
 
     if (config == NULL) {
         LOG_ERROR("Cannot get platform info; Passed in Config Pointer NULL");
-        goto error;
+        return -1;
     }
 
     struct arm_eth_plat_config *plat_config = (struct arm_eth_plat_config *)config;
@@ -494,8 +494,10 @@ ethif_imx6_init(
     dev = (struct imx6_eth_data *)malloc(sizeof(struct imx6_eth_data));
     if (dev == NULL) {
         LOG_ERROR("Failed to allocate eth data struct");
-        goto error;
+        return -1;
     }
+
+    /* We have allocated something and need to free it on any error */
 
     dev->tx_size = CONFIG_LIB_ETHDRIVER_TX_DESC_COUNT;
     dev->rx_size = CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT;
