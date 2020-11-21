@@ -98,28 +98,18 @@ fec_init(
     unsigned int phy_mask,
     struct enet *enet)
 {
-    struct eth_device *edev;
-    struct phy_device *phydev;
-    struct mii_dev *bus;
-    int ret = 0;
-    struct eth_device _eth;
-    /* create and fill edev struct */
-    edev = &_eth;
-    memset(edev, 0, sizeof(*edev));
-
-    edev->priv = (void *)enet;
-    edev->write_hwaddr = NULL;
+    int ret;
 
     /* Allocate the mdio bus */
-    bus = mdio_alloc();
+    struct mii_dev *bus = mdio_alloc();
     if (!bus) {
         LOG_ERROR("Could not allocate MDIO");
         return -1;
     }
+    strncpy(bus->name, "MDIO", sizeof(bus->name));
     bus->read = fec_phy_read;
     bus->write = fec_phy_write;
     bus->priv = enet;
-    strcpy(bus->name, edev->name);
     ret = mdio_register(bus);
     if (ret) {
         LOG_ERROR("Could not register MDIO, code %d", ret);
@@ -127,12 +117,13 @@ fec_init(
         return -1;
     }
 
-    /****** Configure phy ******/
-    phydev = phy_connect_by_mask(
-                bus,
-                phy_mask,
-                edev,
-                PHY_INTERFACE_MODE_RGMII);
+    /* ***** Configure phy *****/
+    struct eth_device edev = { .name = "DUMMY-EDEV" }; // just a dummy
+    struct phy_device *phydev= phy_connect_by_mask(
+                                bus,
+                                phy_mask,
+                                &edev,
+                                PHY_INTERFACE_MODE_RGMII);
     if (!phydev) {
         LOG_ERROR("Could not connect to PHY");
         return -1;
