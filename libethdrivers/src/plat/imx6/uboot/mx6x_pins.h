@@ -4,6 +4,7 @@
 
 /*
  * Copyright (C) 2011 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2020, HENSOLDT Cyber GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,34 +26,7 @@
 
 #pragma once
 
-#include "mx6qsabrelite.h"
-
-/* Use to set PAD control */
-#define PAD_CTL_HYS		(BIT(16))
-#define PAD_CTL_PUS_100K_DOWN	(0 << 14)
-#define PAD_CTL_PUS_47K_UP	(BIT(14))
-#define PAD_CTL_PUS_100K_UP	(2 << 14)
-#define PAD_CTL_PUS_22K_UP	(3 << 14)
-
-#define PAD_CTL_PUE		(BIT(13))
-#define PAD_CTL_PKE		(BIT(12))
-#define PAD_CTL_ODE		(BIT(11))
-#define PAD_CTL_SPEED_LOW	(BIT(6))
-#define PAD_CTL_SPEED_MED	(2 << 6)
-#define PAD_CTL_SPEED_HIGH	(3 << 6)
-#define PAD_CTL_DSE_DISABLE	(0 << 3)
-#define PAD_CTL_DSE_240ohm	(BIT(3))
-#define PAD_CTL_DSE_120ohm	(2 << 3)
-#define PAD_CTL_DSE_80ohm	(3 << 3)
-#define PAD_CTL_DSE_60ohm	(4 << 3)
-#define PAD_CTL_DSE_48ohm	(5 << 3)
-#define PAD_CTL_DSE_40ohm	(6 << 3)
-#define PAD_CTL_DSE_34ohm	(7 << 3)
-#define PAD_CTL_SRE_FAST	(BIT(0))
-#define PAD_CTL_SRE_SLOW	(0 << 0)
-
-#define NO_MUX_I                0
-#define NO_PAD_I                0
+#include "mx6_pins.h"
 
 enum {
 	MX6Q_PAD_SD2_DAT1__USDHC2_DAT1		= IOMUX_PAD(0x0360, 0x004C, 0, 0x0000, 0, 0),
