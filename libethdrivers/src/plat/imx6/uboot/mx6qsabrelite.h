@@ -4,6 +4,7 @@
 
 /*
  * Copyright (C) 2010-2011 Freescale Semiconductor, Inc.
+ * Copyright (C) 2020, HENSOLDT Cyber GmbH
  *
  * Configuration settings for the Freescale i.MX6Q Sabre Lite board.
  *
@@ -115,3 +116,7 @@ typedef uint64_t iomux_v3_cfg_t;
 
 #define MUX_CONFIG_SION     (BIT(4))
 
+
+int
+setup_iomux_enet(
+    ps_io_ops_t *io_ops);
