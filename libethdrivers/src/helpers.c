@@ -17,14 +17,14 @@ dma_alloc_pin(
 {
     void *virt = ps_dma_alloc(dma_man, size, alignment, cached, PS_MEM_NORMAL);
     if (!virt) {
-        return (dma_addr_t) {0, 0};
+        return (dma_addr_t) {.virt = NULL, .phys = 0};
     }
 
     uintptr_t phys = ps_dma_pin(dma_man, virt, size);
     if (!phys) {
         /* hmm this shouldn't really happen */
         ps_dma_free(dma_man, virt, size);
-        return (dma_addr_t) {0, 0};
+        return (dma_addr_t) {.virt = NULL, .phys = 0};
     }
 
     if (!cached) {
