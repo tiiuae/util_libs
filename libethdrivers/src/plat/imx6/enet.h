@@ -29,12 +29,6 @@
 
 struct enet;
 
-struct desc_data {
-    uint32_t tx_phys;
-    uint32_t rx_phys;
-    uint32_t rx_bufsize;
-};
-
 /* Debug */
 void
 enet_dump_regs(
@@ -54,7 +48,9 @@ enet_print_state(
 
 struct enet *
 enet_init(
-    struct desc_data desc_data,
+    uint32_t tx_phys,
+    uint32_t rx_phys,
+    uint32_t rx_bufsize,
     ps_io_ops_t *io_ops);
 
 /* Read and write to the phy over the mdio interface */

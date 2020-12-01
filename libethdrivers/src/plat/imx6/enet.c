@@ -598,7 +598,9 @@ enet_prom_disable(
 /*----------------------------------------------------------------------------*/
 struct enet *
 enet_init(
-    struct desc_data desc_data,
+    uint32_t tx_phys,
+    uint32_t rx_phys,
+    uint32_t rx_bufsize,
     ps_io_ops_t *io_ops)
 {
     enet_regs_t *regs;
@@ -704,9 +706,9 @@ enet_init(
     regs->racc = RACC_LINEDIS;
 
     /* DMA descriptors */
-    regs->tdsr = desc_data.tx_phys;
-    regs->rdsr = desc_data.rx_phys;
-    regs->mrbr = desc_data.rx_bufsize;
+    regs->tdsr = tx_phys;
+    regs->rdsr = rx_phys;
+    regs->mrbr = rx_bufsize;
 
     /* Receive control - Set frame length and RGMII mode */
     regs->rcr = RCR_MAX_FL(FRAME_LEN) | RCR_RGMII_EN | RCR_MII_MODE;
