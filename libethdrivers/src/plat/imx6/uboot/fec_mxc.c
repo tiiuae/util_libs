@@ -71,30 +71,26 @@ fec_phy_write(
     return enet_mdio_write(enet, phyAddr, regAddr, data);
 }
 
-/*----------------------------------------------------------------------------
- * Halt the FEC engine
- * @param[in] dev Our device to handle
- */
-void
-fec_halt(
-    struct eth_device *dev)
-{
-#if 0
-    struct fec_priv *fec = (struct fec_priv *)dev->priv;
-    int counter = 0xffff;
-    /* issue graceful stop command to the FEC transmitter if necessary */
-    writel(FEC_TCNTRL_GTS | readl(&fec->eth->x_cntrl), &fec->eth->x_cntrl);
-    /* wait for graceful stop to register */
-    while ((counter--) && (!(readl(&fec->eth->ievent) & FEC_IEVENT_GRA))) {
-        udelay(1);
-    }
-    writel(readl(&fec->eth->ecntrl) & ~FEC_ECNTRL_ETHER_EN, &fec->eth->ecntrl);
-    fec->rbd_index = 0;
-    fec->tbd_index = 0;
-#else
-    assert(!"unimplemented");
-#endif
-}
+// /*---------------------------------------------------------------------------
+//  * Halt the FEC engine
+//  * @param[in] dev Our device to handle
+//  */
+// void
+// fec_halt(
+//     struct eth_device *dev)
+// {
+//     struct fec_priv *fec = (struct fec_priv *)dev->priv;
+//     int counter = 0xffff;
+//     /* issue graceful stop command to the FEC transmitter if necessary */
+//     writel(FEC_TCNTRL_GTS | readl(&fec->eth->x_cntrl), &fec->eth->x_cntrl);
+//     /* wait for graceful stop to register */
+//     while ((counter--) && (!(readl(&fec->eth->ievent) & FEC_IEVENT_GRA))) {
+//         udelay(1);
+//     }
+//     writel(readl(&fec->eth->ecntrl) & ~FEC_ECNTRL_ETHER_EN, &fec->eth->ecntrl);
+//     fec->rbd_index = 0;
+//     fec->tbd_index = 0;
+// }
 
 /*----------------------------------------------------------------------------*/
 int
