@@ -22,6 +22,8 @@
 #include "uboot/micrel.h"
 #include "unimplemented.h"
 
+#define IRQ_MASK    (NETIRQ_RXF | NETIRQ_TXF | NETIRQ_EBERR)
+
 #define BUF_SIZE    MAX_PKT_SIZE
 #define DMA_ALIGN   32
 
@@ -190,18 +192,6 @@ fill_rx_bufs(
             enet_rx_enable(enet);
         }
     }
-}
-
-/*----------------------------------------------------------------------------*/
-static void
-enable_interrupts(
-    struct imx6_eth_data *dev)
-{
-    struct enet *enet = dev->enet;
-    assert(enet);
-    enet_enable_events(enet, 0);
-    enet_clr_events(enet, (uint32_t) ~(NETIRQ_RXF | NETIRQ_TXF | NETIRQ_EBERR));
-    enet_enable_events(enet, (uint32_t) NETIRQ_RXF | NETIRQ_TXF | NETIRQ_EBERR);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -455,7 +445,7 @@ handle_irq(
     struct enet *enet = get_enet_from_driver(driver);
     assert(enet);
 
-    uint32_t e = enet_clr_events(enet, NETIRQ_RXF | NETIRQ_TXF | NETIRQ_EBERR);
+    uint32_t e = enet_clr_events(enet, IRQ_MASK);
     if (e & NETIRQ_TXF) {
         complete_tx(driver);
     }
@@ -694,7 +684,11 @@ ethif_imx6_init(
     enet_enable(enet);
 
     fill_rx_bufs(driver);
-    enable_interrupts(dev);
+
+    /* enable interrupts */
+    enet_enable_events(enet, 0);
+    enet_clr_events(enet, (uint32_t)~IRQ_MASK);
+    enet_enable_events(enet, (uint32_t)IRQ_MASK);
 
     /* done */
     return 0;
