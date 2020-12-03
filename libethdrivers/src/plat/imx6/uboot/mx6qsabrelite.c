@@ -110,6 +110,7 @@ int setup_iomux_enet(ps_io_ops_t *io_ops)
         unmapOnExit = 1;
     }
     if (!base) {
+        LOG_ERROR("base is NULL");
         return 1;
     }
 

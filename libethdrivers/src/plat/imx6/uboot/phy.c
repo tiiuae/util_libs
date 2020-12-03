@@ -23,6 +23,7 @@
  *
  * Copyright 2011 Freescale Semiconductor, Inc.
  * author Andy Fleming
+ * Copyright 2020, HENSOLDT Cyber GmbH
  *
  * Based loosely off of Linux's PHY Lib
  */
@@ -476,8 +477,7 @@ static struct phy_device *phy_device_create(struct mii_dev *bus, int addr,
 	 * default values */
 	dev = malloc(sizeof(*dev));
 	if (!dev) {
-		printf("Failed to allocate PHY device for %s:%d\n",
-			bus->name, addr);
+		LOG_ERROR("Failed to allocate PHY device for '%s':%d", bus->name, addr);
 		return NULL;
 	}
 
@@ -518,18 +518,20 @@ static int get_phy_id(struct mii_dev *bus, int addr, int devad, u32 *phy_id)
 	/* Grab the bits from PHYIR1, and put them
 	 * in the upper half */
 	phy_reg = bus->read(bus, addr, devad, MII_PHYSID1);
-
 	if (phy_reg < 0)
+	{
+		LOG_ERROR("read MII_PHYSID1 failed, code %d", phy_reg);
 		return -EIO;
-
+	}
 	*phy_id = (phy_reg & 0xffff) << 16;
 
 	/* Grab the bits from PHYIR2, and put them in the lower half */
 	phy_reg = bus->read(bus, addr, devad, MII_PHYSID2);
-
 	if (phy_reg < 0)
+	{
+		LOG_ERROR("read MII_PHYSID2 failed, code %d", phy_reg);
 		return -EIO;
-
+	}
 	*phy_id |= (phy_reg & 0xffff);
 
 	return 0;
@@ -549,6 +551,7 @@ static struct phy_device *create_phy_by_mask(struct mii_dev *bus,
 			return phy_device_create(bus, addr, phy_id, interface);
 		phy_mask &= ~(BIT(addr));
 	}
+	LOG_ERROR("Failed to create PHY by mask");
 	return NULL;
 }
 
@@ -585,7 +588,7 @@ static struct phy_device *get_phy_device_by_mask(struct mii_dev *bus,
 		if (phydev)
 			return phydev;
 	}
-	printf("Phy not found\n");
+	LOG_ERROR("PHY not found");
 	return phy_device_create(bus, ffs(phy_mask) - 1, 0xffffffff, interface);
 }
 
@@ -621,14 +624,14 @@ int phy_reset(struct phy_device *phydev)
 
 	reg = phy_read(phydev, devad, MII_BMCR);
 	if (reg < 0) {
-		debug("PHY status read failed\n");
+		LOG_ERROR("PHY status read failed");
 		return -1;
 	}
 
 	reg |= BMCR_RESET;
 
 	if (phy_write(phydev, devad, MII_BMCR, reg) < 0) {
-		debug("PHY reset failed\n");
+		LOG_ERROR("PHY reset failed");
 		return -1;
 	}
 
@@ -644,14 +647,14 @@ int phy_reset(struct phy_device *phydev)
 		reg = phy_read(phydev, devad, MII_BMCR);
 
 		if (reg < 0) {
-			debug("PHY status read failed\n");
+			LOG_ERROR("PHY status read failed");
 			return -1;
 		}
 		udelay(1000);
 	}
 
 	if (reg & BMCR_RESET) {
-		puts("PHY reset timed out\n");
+		LOG_ERROR("PHY reset timed out");
 		return -1;
 	}
 
@@ -688,8 +691,7 @@ struct phy_device *phy_connect_by_mask(struct mii_dev *bus, unsigned phy_mask,
 	phydev = get_phy_device_by_mask(bus, phy_mask, interface);
 
 	if (!phydev) {
-		printf("Could not get PHY for %s: phy mask %x\n",
-				bus->name, phy_mask);
+		LOG_ERROR("Could not get PHY for '%s' phy mask 0x%x", bus->name, phy_mask);
 		return NULL;
 	}
 
@@ -697,12 +699,13 @@ struct phy_device *phy_connect_by_mask(struct mii_dev *bus, unsigned phy_mask,
 	phy_reset(phydev);
 
 	if (phydev->dev)
-		printf("%s:%d is connected to %s.  Reconnecting to %s\n",
+		LOG_INFO("%s:%d is connected to %s.  Reconnecting to %s",
 			bus->name, phydev->addr, phydev->dev->name, dev->name);
 
 	phydev->dev = dev;
 
-	debug("%s connected to %s\n", dev->name, phydev->drv->name);
+	LOG_INFO("Connected PHY '%s' at address %d to '%s'",
+			phydev->drv->name, phydev->addr, phydev->dev->name);
 
 	return phydev;
 }

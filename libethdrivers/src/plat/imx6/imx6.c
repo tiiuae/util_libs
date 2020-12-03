@@ -230,6 +230,7 @@ initialize_desc_ring(
     dev->tx_cookies = malloc(sizeof(void *) * dev->tx_size);
     dev->tx_lengths = malloc(sizeof(unsigned int) * dev->tx_size);
     if (!dev->rx_cookies || !dev->tx_cookies || !dev->tx_lengths) {
+        LOG_ERROR("Failed to malloc");
         if (dev->rx_cookies) {
             free(dev->rx_cookies);
         }
@@ -239,7 +240,6 @@ initialize_desc_ring(
         if (dev->tx_lengths) {
             free(dev->tx_lengths);
         }
-        LOG_ERROR("Failed to malloc");
         free_desc_ring(dev, dma_man);
         return -1;
     }
@@ -362,7 +362,7 @@ handle_irq(
         fill_rx_bufs(driver);
     }
     if (e & NETIRQ_EBERR) {
-        printf("Error: System bus/uDMA\n");
+        LOG_ERROR("Error: System bus/uDMA");
         //ethif_print_state(netif_get_eth_driver(netif));
         assert(0);
         while (1);
@@ -377,7 +377,13 @@ eth_irq_handle(
     ps_irq_acknowledge_fn_t acknowledge_fn,
     void *ack_data)
 {
-    ZF_LOGF_IF(data == NULL, "Passed in NULL for the data");
+    if (data == NULL)
+    {
+        LOG_ERROR("IRQ handler got data=NULL");
+        assert(0);
+        return;
+    }
+
     struct eth_driver *driver = data;
 
     /* handle_irq doesn't really expect an IRQ number */
@@ -385,7 +391,7 @@ eth_irq_handle(
 
     int error = acknowledge_fn(ack_data);
     if (error) {
-        LOG_ERROR("Failed to acknowledge the Ethernet device's IRQ");
+        LOG_ERROR("Failed to acknowledge the Ethernet device's IRQ, code %d", error);
     }
 }
 
@@ -417,6 +423,7 @@ raw_tx(
         /* try and complete some */
         complete_tx(driver);
         if (dev->tx_remain < num) {
+            LOG_ERROR("TX queue lacks space, have %d, need %d", dev->tx_remain, num);
             return ETHIF_TX_FAILED;
         }
     }
@@ -498,7 +505,7 @@ ethif_imx6_init(
 
     err = initialize_desc_ring(eth_data, &io_ops.dma_manager);
     if (err) {
-        LOG_ERROR("Failed to allocate descriptor rings");
+        LOG_ERROR("Failed to allocate descriptor rings, code %d", err);
         goto error;
     }
 
@@ -512,7 +519,7 @@ ethif_imx6_init(
     /* Initialise ethernet pins, also does a PHY reset */
     err = setup_iomux_enet(&io_ops);
     if (err) {
-        LOG_ERROR("Failed to setup iomux enet");
+        LOG_ERROR("Failed to setup IOMUX for ENET, code %d", err);
         goto error;
     }
 
@@ -555,6 +562,8 @@ ethif_imx6_init(
     if (ocotp == NULL || ocotp_get_mac(ocotp, mac)) {
         memcpy(mac, DEFAULT_MAC, 6);
     }
+    LOG_INFO("using MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     enet_set_mac(enet, mac);
 
@@ -601,19 +610,24 @@ allocate_register_callback(
     void *token)
 {
     if (token == NULL) {
-        ZF_LOGE("Expected a token!");
+        LOG_ERROR("Expected a token!");
         return -EINVAL;
     }
 
-    callback_args_t *args = token;
-    if (curr_num == 0) {
-        args->addr = ps_pmem_map(args->io_ops, pmem, false, PS_MEM_NORMAL);
-        if (!args->addr) {
-            ZF_LOGE("Failed to map the Ethernet device");
-            return -EIO;
-        }
+    /* we support only one peripheral, ignore others gracefully */
+    if (curr_num != 0) {
+        ZF_LOGW("Ignoring peripheral #%d at 0x%"PRIx64, curr_num, pmem.base_addr);
+        return 0;
     }
 
+    callback_args_t *args = token;
+    void *addr = ps_pmem_map(args->io_ops, pmem, false, PS_MEM_NORMAL);
+    if (!addr) {
+        LOG_ERROR("Failed to map the Ethernet device");
+        return -EIO;
+    }
+
+    args->addr = addr;
     return 0;
 }
 
@@ -626,30 +640,28 @@ allocate_irq_callback(
     void *token)
 {
     if (token == NULL) {
-        ZF_LOGE("Expected a token!");
+        LOG_ERROR("Expected a token!");
         return -EINVAL;
     }
 
-    unsigned target_num = 0;
+    unsigned target_num = config_set(CONFIG_PLAT_IMX8MQ_EVK) ? 2 : 0;
+    if (curr_num != target_num) {
+        ZF_LOGW("Ignoring interrupt #%d with value %d", curr_num, irq);
+        return 0;
+    }
+
     callback_args_t *args = token;
-    if (config_set(CONFIG_PLAT_IMX6)) {
-        target_num = 0;
-    } else if (config_set(CONFIG_PLAT_IMX8MQ_EVK)) {
-        target_num = 2;
+    irq_id_t irq_id = ps_irq_register(
+                        &args->io_ops->irq_ops,
+                        irq,
+                        eth_irq_handle,
+                        args->eth_driver);
+    if (irq_id < 0) {
+        LOG_ERROR("Failed to register the Ethernet device's IRQ");
+        return -EIO;
     }
 
-    if (curr_num == target_num) {
-        args->irq_id = ps_irq_register(
-                            &args->io_ops->irq_ops,
-                            irq,
-                            eth_irq_handle,
-                            args->eth_driver);
-        if (args->irq_id < 0) {
-            ZF_LOGE("Failed to register the Ethernet device's IRQ");
-            return -EIO;
-        }
-    }
-
+    args->irq_id = irq_id;
     return 0;
 }
 
@@ -666,7 +678,7 @@ ethif_imx_init_module(
                     sizeof(*eth_driver),
                     (void **) &eth_driver);
     if (error) {
-        ZF_LOGE("Failed to allocate memory for the Ethernet driver");
+        LOG_ERROR("Failed to allocate memory for the Ethernet driver, code %d", error);
         return -ENOMEM;
     }
 
@@ -678,7 +690,7 @@ ethif_imx_init_module(
                 device_path,
                 &cookie);
     if (error) {
-        ZF_LOGE("Failed to read the path of the Ethernet device");
+        LOG_ERROR("Failed to read the path of the Ethernet device, code %d", error);
         return -ENODEV;
     }
 
@@ -688,7 +700,7 @@ ethif_imx_init_module(
                 allocate_register_callback,
                 &args);
     if (error) {
-        ZF_LOGE("Failed to walk the Ethernet device's registers and allocate them");
+        LOG_ERROR("Failed to walk the Ethernet device's registers and allocate them, code %d", error);
         return -ENODEV;
     }
 
@@ -698,13 +710,13 @@ ethif_imx_init_module(
                 allocate_irq_callback,
                 &args);
     if (error) {
-        ZF_LOGE("Failed to walk the Ethernet device's IRQs and allocate them");
+        LOG_ERROR("Failed to walk the Ethernet device's IRQs and allocate them, code %d", error);
         return -ENODEV;
     }
 
     error = ps_fdt_cleanup_cookie(&io_ops->malloc_ops, cookie);
     if (error) {
-        ZF_LOGE("Failed to free the cookie used to allocate resources");
+        LOG_ERROR("Failed to free the cookie used to allocate resources, code %d", error);
         return -ENODEV;
     }
 
@@ -716,15 +728,21 @@ ethif_imx_init_module(
 
     error = ethif_imx6_init(eth_driver, *io_ops, &plat_config);
     if (error) {
-        ZF_LOGE("Failed to initialise the Ethernet driver");
+        LOG_ERROR("Failed to initialise the Ethernet driver, code %d", error);
         return -ENODEV;
     }
 
-    return ps_interface_register(
+    error = ps_interface_register(
                 &io_ops->interface_registration_ops,
                 PS_ETHERNET_INTERFACE,
                 eth_driver,
                 NULL);
+    if (error) {
+        LOG_ERROR("Failed to register Ethernet driver interface , code %d", error);
+        return -ENODEV;
+    }
+
+    return 0;
 }
 
 /*----------------------------------------------------------------------------*/

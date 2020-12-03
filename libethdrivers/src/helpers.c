@@ -17,11 +17,14 @@ dma_alloc_pin(
 {
     void *virt = ps_dma_alloc(dma_man, size, alignment, cached, PS_MEM_NORMAL);
     if (!virt) {
+        LOG_ERROR("ps_dma_alloc() failed for size=%zu, alignment=%d",
+                  size, alignment);
         return (dma_addr_t) {.virt = NULL, .phys = 0};
     }
 
     uintptr_t phys = ps_dma_pin(dma_man, virt, size);
     if (!phys) {
+        LOG_ERROR("ps_dma_pin() failed for virt=%p, size=%zu", virt, size);
         /* hmm this shouldn't really happen */
         ps_dma_free(dma_man, virt, size);
         return (dma_addr_t) {.virt = NULL, .phys = 0};

@@ -117,6 +117,7 @@ fec_init(
     /* Allocate the mdio bus */
     bus = mdio_alloc();
     if (!bus) {
+        LOG_ERROR("Could not allocate MDIO");
         return -1;
     }
     bus->read = fec_phy_read;
@@ -125,6 +126,7 @@ fec_init(
     strcpy(bus->name, edev->name);
     ret = mdio_register(bus);
     if (ret) {
+        LOG_ERROR("Could not register MDIO, code %d", ret);
         free(bus);
         return -1;
     }
@@ -136,6 +138,7 @@ fec_init(
                 edev,
                 PHY_INTERFACE_MODE_RGMII);
     if (!phydev) {
+        LOG_ERROR("Could not connect to PHY");
         return -1;
     }
 
@@ -168,7 +171,7 @@ fec_init(
     /* Start up the PHY */
     ret = ksz9021_startup(phydev);
     if (ret) {
-        printf("Could not initialize PHY %s\n", phydev->dev->name);
+        LOG_ERROR("Could not initialize PHY '%s', code %d", phydev->dev->name, ret);
         return ret;
     }
 

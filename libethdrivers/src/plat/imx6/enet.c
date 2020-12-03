@@ -390,7 +390,7 @@ enet_set_speed(
         rcr |= RCR_RMII_10T;
         break;
     default:
-        printf("Invalid speed\n");
+        LOG_ERROR("Invalid speed");
         assert(0);
         return;
     }
@@ -608,6 +608,7 @@ enet_init(
     /* Map in the device */
     regs = RESOURCE(&io_ops->io_mapper, IMX6_ENET);
     if (regs == NULL) {
+        LOG_ERROR("ethernet controller could not be mapped");
         return NULL;
     }
     ret = (struct enet *)regs;
@@ -635,6 +636,7 @@ enet_init(
     // TODO Implement an actual clock driver for the imx8mq
     void *clock_base = RESOURCE(&io_ops->io_mapper, CCM);
     if (!clock_base) {
+        LOG_ERROR("clock controller could not be mapped");
         return NULL;
     }
 
