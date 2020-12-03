@@ -473,14 +473,14 @@ static struct raw_iface_funcs iface_fns = {
 /*----------------------------------------------------------------------------*/
 int
 ethif_imx6_init(
-    struct eth_driver *eth_driver,
+    struct eth_driver *driver,
     ps_io_ops_t io_ops,
     void *config)
 {
     int err;
 
     /* need to free these on error if assigned */
-    struct imx6_eth_data *eth_data = NULL;
+    struct imx6_eth_data *dev = NULL;
     struct ocotp *ocotp = NULL;
     struct enet *enet = NULL;
 
@@ -491,19 +491,19 @@ ethif_imx6_init(
 
     struct arm_eth_plat_config *plat_config = (struct arm_eth_plat_config *)config;
 
-    eth_data = (struct imx6_eth_data *)malloc(sizeof(struct imx6_eth_data));
-    if (eth_data == NULL) {
+    dev = (struct imx6_eth_data *)malloc(sizeof(struct imx6_eth_data));
+    if (dev == NULL) {
         LOG_ERROR("Failed to allocate eth data struct");
         goto error;
     }
 
-    eth_data->tx_size = CONFIG_LIB_ETHDRIVER_TX_DESC_COUNT;
-    eth_data->rx_size = CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT;
-    eth_driver->eth_data = eth_data;
-    eth_driver->dma_alignment = DMA_ALIGN;
-    eth_driver->i_fn = iface_fns;
+    dev->tx_size = CONFIG_LIB_ETHDRIVER_TX_DESC_COUNT;
+    dev->rx_size = CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT;
+    driver->eth_data = dev;
+    driver->dma_alignment = DMA_ALIGN;
+    driver->i_fn = iface_fns;
 
-    err = initialize_desc_ring(eth_data, &io_ops.dma_manager);
+    err = initialize_desc_ring(dev, &io_ops.dma_manager);
     if (err) {
         LOG_ERROR("Failed to allocate descriptor rings, code %d", err);
         goto error;
@@ -531,8 +531,8 @@ ethif_imx6_init(
 
     /* Initialise the RGMII interface */
     enet = enet_init(
-            eth_data->tx_ring_phys,
-            eth_data->rx_ring_phys,
+            dev->tx_ring_phys,
+            dev->rx_ring_phys,
             BUF_SIZE,
             &io_ops);
     if (!enet) {
@@ -541,7 +541,7 @@ ethif_imx6_init(
         assert(!"enet cannot be cleaned up");
         goto error;
     }
-    eth_data->enet = enet;
+    dev->enet = enet;
 
     /* Non-Promiscuous mode means that only traffic relevant for us is made
      * visible by the hardware, everything else is discarded automatically. We
@@ -575,8 +575,8 @@ ethif_imx6_init(
     /* Start the controller */
     enet_enable(enet);
 
-    fill_rx_bufs(eth_driver);
-    enable_interrupts(eth_data);
+    fill_rx_bufs(driver);
+    enable_interrupts(dev);
 
     /* done */
     return 0;
@@ -584,9 +584,9 @@ error:
     if (ocotp) {
         ocotp_free(ocotp, &io_ops.io_mapper);
     }
-    if (eth_data) {
-        free_desc_ring(eth_data, &io_ops.dma_manager);
-        free(eth_data);
+    if (dev) {
+        free_desc_ring(dev, &io_ops.dma_manager);
+        free(dev);
     }
     return -1;
 }
