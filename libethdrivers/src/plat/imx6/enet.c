@@ -601,6 +601,7 @@ enet_init(
     uint32_t tx_phys,
     uint32_t rx_phys,
     uint32_t rx_bufsize,
+    char *mac,
     ps_io_ops_t *io_ops)
 {
     struct clock *enet_clk_ptr = NULL;
@@ -679,7 +680,7 @@ enet_init(
     regs->galr = 0;
 
     /* Set MAC and pause frame type field */
-    enet_set_mac(enet, (unsigned char *)"\0\0\0\0\0\0");
+    enet_set_mac(enet, mac);
 
     /* Configure pause frames (continues into MAC registers...) */
     regs->opd = PAUSE_OPCODE_FIELD << 16;

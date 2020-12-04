@@ -22,8 +22,6 @@
 #include "uboot/micrel.h"
 #include "unimplemented.h"
 
-#define DEFAULT_MAC "\x00\x19\xb8\x00\xf0\xa3"
-
 #define BUF_SIZE    MAX_PKT_SIZE
 #define DMA_ALIGN   32
 
@@ -574,11 +572,6 @@ ethif_imx6_init(
         .get_mac         = get_mac
     };
 
-    /* need to free these on error if assigned */
-    struct imx6_eth_data *dev = NULL;
-    struct ocotp *ocotp = NULL;
-    struct enet *enet = NULL;
-
     if (config == NULL) {
         LOG_ERROR("Cannot get platform info; Passed in Config Pointer NULL");
         return -1;
@@ -586,6 +579,26 @@ ethif_imx6_init(
 
     struct arm_eth_plat_config *plat_config = (struct arm_eth_plat_config *)config;
 
+    LOG_INFO("obtain MAC from OCOTP");
+    struct ocotp *ocotp = ocotp_init(&io_ops.io_mapper);
+    if (!ocotp) {
+        LOG_ERROR("Failed to initialize OCOTP");
+        return -1;
+    }
+
+    uint8_t mac[6] = {0};
+    err = ocotp_get_mac(ocotp, mac);
+    ocotp_free(ocotp, &io_ops.io_mapper);
+    if (err) {
+        LOG_ERROR("Failed to get MAC from OCOTP, code %d", err);
+        return -1;
+    }
+
+    LOG_INFO("using MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+
+    struct imx6_eth_data *dev = NULL;
     err = ps_calloc(
             &io_ops.malloc_ops,
             1,
@@ -610,13 +623,6 @@ ethif_imx6_init(
     /* Add initialized device context to driver */
     driver->eth_data = dev;
 
-    /* initialise the eFuse controller so we can get a MAC address */
-    ocotp = ocotp_init(&io_ops.io_mapper);
-    if (!ocotp) {
-        LOG_ERROR("Failed to initialize ocotp");
-        goto error;
-    }
-
     /* Initialise ethernet pins, also does a PHY reset */
     err = setup_iomux_enet(&io_ops);
     if (err) {
@@ -624,18 +630,13 @@ ethif_imx6_init(
         goto error;
     }
 
-    /* Initialise the phy library */
-    miiphy_init();
-
-    /* Initialise the phy */
-    phy_micrel_init();
-
     /* Initialise the RGMII interface */
-    enet = enet_init(
-            dev->tx_ring_phys,
-            dev->rx_ring_phys,
-            BUF_SIZE,
-            &io_ops);
+    struct enet *enet = enet_init(
+                            dev->tx_ring_phys,
+                            dev->rx_ring_phys,
+                            BUF_SIZE,
+                            mac,
+                            &io_ops);
     if (!enet) {
         LOG_ERROR("Failed to initialize RGMII");
         /* currently no way to properly clean up enet */
@@ -657,15 +658,10 @@ ethif_imx6_init(
         enet_prom_disable(enet);
     }
 
-    uint8_t mac[6];
-    if (ocotp == NULL || ocotp_get_mac(ocotp, mac)) {
-        memcpy(mac, DEFAULT_MAC, 6);
-    }
-    LOG_INFO("using MAC: %02x:%02x:%02x:%02x:%02x:%02x",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-    enet_set_mac(enet, mac);
-
+    /* Initialise the phy library */
+    miiphy_init();
+    /* Initialise the phy */
+    phy_micrel_init();
     /* Connect the phy to the ethernet controller */
     unsigned int phy_mask = 0xffffffff;
     struct phy_device *phydev = fec_init(phy_mask, enet);
@@ -695,13 +691,10 @@ ethif_imx6_init(
     return 0;
 
 error:
-    if (ocotp) {
-        ocotp_free(ocotp, &io_ops.io_mapper);
-    }
-    if (dev) {
-        free_desc_ring(dev, &io_ops);
-        ps_free(&io_ops.malloc_ops, sizeof(*dev), dev);
-    }
+    // ToDo: free enet
+    assert(dev); // we exit above if allocation failed
+    free_desc_ring(dev, &io_ops);
+    ps_free(&io_ops.malloc_ops, sizeof(*dev), dev);
     driver->eth_data = NULL;
     return -1;
 }

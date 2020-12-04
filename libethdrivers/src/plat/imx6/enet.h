@@ -51,6 +51,7 @@ enet_init(
     uint32_t tx_phys,
     uint32_t rx_phys,
     uint32_t rx_bufsize,
+    char *mac,
     ps_io_ops_t *io_ops);
 
 /* Read and write to the phy over the mdio interface */
