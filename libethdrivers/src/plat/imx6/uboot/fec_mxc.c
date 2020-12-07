@@ -45,7 +45,7 @@
 #undef DEBUG
 
 /*----------------------------------------------------------------------------*/
-int
+static int
 fec_phy_read(
     struct mii_dev *bus,
     int phyAddr,
@@ -58,7 +58,7 @@ fec_phy_read(
 }
 
 /*----------------------------------------------------------------------------*/
-int
+static int
 fec_phy_write(
     struct mii_dev *bus,
     int phyAddr,
