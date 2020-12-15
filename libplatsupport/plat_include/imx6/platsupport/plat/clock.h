@@ -1,5 +1,6 @@
 /*
  * Copyright 2017, Data61, CSIRO (ABN 41 687 119 230)
+ * Copyright 2020, HENSOLDT Cyber GmbH
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -38,6 +39,7 @@ enum clk_id {
 enum clock_gate {
     /* -- CCGR0 -- */
     /* -- CCGR1 -- */
+    enet_clock   = CLK_GATE(1, 5),
     /* -- CCGR2 -- */
     ocotp_ctrl   = CLK_GATE(2, 6),
     i2c3_serial  = CLK_GATE(2, 5),
