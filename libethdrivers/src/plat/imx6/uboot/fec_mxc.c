@@ -137,14 +137,6 @@ fec_init(
     phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x05);
     phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x100);
 
-    if (phydev->drv->config) {
-        phydev->drv->config(phydev);
-    }
-
-    if (phydev->drv->startup) {
-        phydev->drv->startup(phydev);
-    }
-
 #elif defined(CONFIG_PLAT_IMX6)
 
     /* min rx data delay */
@@ -153,18 +145,28 @@ fec_init(
     ksz9021_phy_extended_write(phydev, MII_KSZ9021_EXT_RGMII_TX_DATA_SKEW, 0x0);
     /* max rx/tx clock delay, min rx/tx control */
     ksz9021_phy_extended_write(phydev, MII_KSZ9021_EXT_RGMII_CLOCK_SKEW, 0xf0f0);
-    ksz9021_config(phydev);
-
-    /* Start up the PHY */
-    ret = ksz9021_startup(phydev);
-    if (ret) {
-        LOG_ERROR("Could not initialize PHY '%s', code %d", phydev->dev->name, ret);
-        return NULL;
-    }
 
 #else
 #error "unsupported platform"
 #endif
+
+    if (phydev->drv->config) {
+        ret = phydev->drv->config(phydev);
+        if (ret) {
+            LOG_ERROR("Could not configure PHY '%s', code %d",
+                      phydev->dev->name, ret);
+            return NULL;
+        }
+    }
+
+    if (phydev->drv->startup) {
+        ret = phydev->drv->startup(phydev);
+        if (ret) {
+            LOG_ERROR("Could not init PHY '%s', code %d",
+                      phydev->dev->name, ret);
+            return NULL;
+        }
+    }
 
     return phydev;
 }
