@@ -49,9 +49,9 @@ struct eth_device {
     int (*write_hwaddr)(struct eth_device *dev);
 };
 
-int
+struct phy_device *
 fec_init(
-    unsigned phy_mask,
+    unsigned phy_mask, 
     struct enet *enet);
 
 #define FEC_RCNTRL_MAX_FL_SHIFT     16

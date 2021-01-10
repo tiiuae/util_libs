@@ -668,10 +668,22 @@ ethif_imx6_init(
 
     /* Connect the phy to the ethernet controller */
     unsigned int phy_mask = 0xffffffff;
-    if (fec_init(phy_mask, enet)) {
+    struct phy_device *phydev = fec_init(phy_mask, enet);
+    if (!phydev) {
         LOG_ERROR("Failed to initialize fec");
         goto error;
     }
+
+    enet_set_speed(
+        enet,
+        phydev->speed,
+        (phydev->duplex == DUPLEX_FULL) ? 1 : 0);
+
+    printf("\n  * Link speed: %d Mbps, %s-duplex *\n\n",
+           phydev->speed,
+           (phydev->duplex == DUPLEX_FULL) ? "full" : "half");
+
+    udelay(100000); // why?
 
     /* Start the controller */
     enet_enable(enet);

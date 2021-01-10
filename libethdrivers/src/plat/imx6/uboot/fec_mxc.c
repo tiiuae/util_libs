@@ -93,7 +93,7 @@ fec_phy_write(
 // }
 
 /*----------------------------------------------------------------------------*/
-int
+struct phy_device *
 fec_init(
     unsigned int phy_mask,
     struct enet *enet)
@@ -104,7 +104,7 @@ fec_init(
     struct mii_dev *bus = mdio_alloc();
     if (!bus) {
         LOG_ERROR("Could not allocate MDIO");
-        return -1;
+        return NULL;
     }
     strncpy(bus->name, "MDIO", sizeof(bus->name));
     bus->read = fec_phy_read;
@@ -114,7 +114,7 @@ fec_init(
     if (ret) {
         LOG_ERROR("Could not register MDIO, code %d", ret);
         free(bus);
-        return -1;
+        return NULL;
     }
 
     /* ***** Configure phy *****/
@@ -126,7 +126,7 @@ fec_init(
                                 PHY_INTERFACE_MODE_RGMII);
     if (!phydev) {
         LOG_ERROR("Could not connect to PHY");
-        return -1;
+        return NULL;
     }
 
 #if defined(CONFIG_PLAT_IMX8MQ_EVK)
@@ -159,22 +159,12 @@ fec_init(
     ret = ksz9021_startup(phydev);
     if (ret) {
         LOG_ERROR("Could not initialize PHY '%s', code %d", phydev->dev->name, ret);
-        return ret;
+        return NULL;
     }
 
 #else
 #error "unsupported platform"
 #endif
 
-    printf("\n  * Link speed: %4i Mbps, ", phydev->speed);
-    if (phydev->duplex == DUPLEX_FULL) {
-        enet_set_speed(enet, phydev->speed, 1);
-        printf("full-duplex *\n");
-    } else {
-        enet_set_speed(enet, phydev->speed, 0);
-        printf("half-duplex *\n");
-    }
-
-    udelay(100000);
-    return 0;
+    return phydev;
 }
