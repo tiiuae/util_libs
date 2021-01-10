@@ -556,17 +556,6 @@ ethif_imx6_init(
 {
     int err;
 
-    /* initialize generic driver context */
-    driver->dma_alignment = DMA_ALIGN;
-    driver->i_fn = (struct raw_iface_funcs){
-        .raw_handleIRQ   = handle_irq,
-        .print_state     = print_state,
-        .low_level_init  = low_level_init,
-        .raw_tx          = raw_tx,
-        .raw_poll        = raw_poll,
-        .get_mac         = get_mac
-    };
-
     if (config == NULL) {
         LOG_ERROR("Cannot get platform info; Passed in Config Pointer NULL");
         return -1;
@@ -596,31 +585,15 @@ ethif_imx6_init(
              (uint8_t)(mac >> 8),
              (uint8_t)(mac));
 
+    struct imx6_eth_data *dev = get_dev_from_driver(driver);
 
-    struct imx6_eth_data *dev = NULL;
-    err = ps_calloc(
-            &io_ops.malloc_ops,
-            1,
-            sizeof(struct imx6_eth_data),
-            (void **)&dev);
-    if (err) {
-        LOG_ERROR("ps_calloc() failed for eth data struct, code %d", err);
-        return -1;
-    }
-
-    /* We have allocated something and need to free it on any error */
-
-    dev->tx_size = CONFIG_LIB_ETHDRIVER_TX_DESC_COUNT;
-    dev->rx_size = CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT;
-
+    /* allocate descriptor ring */
     err = initialize_desc_ring(dev, driver->dma_alignment, &io_ops);
     if (err) {
         LOG_ERROR("Failed to allocate descriptor rings, code %d", err);
-        goto error;
+        return -1;
     }
-
-    /* Add initialized device context to driver */
-    driver->eth_data = dev;
+    /* allocation successful, need to free it on any error from now own */
 
     /* Initialise ethernet pins, also does a PHY reset */
     err = setup_iomux_enet(&io_ops);
@@ -693,10 +666,7 @@ ethif_imx6_init(
 
 error:
     // ToDo: free enet
-    assert(dev); // we exit above if allocation failed
     free_desc_ring(dev, &io_ops);
-    ps_free(&io_ops.malloc_ops, sizeof(*dev), dev);
-    driver->eth_data = NULL;
     return -1;
 }
 
@@ -778,19 +748,28 @@ ethif_imx_init_module(
     ps_io_ops_t *io_ops,
     const char *device_path)
 {
-    struct eth_driver *eth_driver = NULL;
-    int error = ps_calloc(
-                    &io_ops->malloc_ops,
-                    1,
-                    sizeof(*eth_driver),
-                    (void **) &eth_driver);
-    if (error) {
-        LOG_ERROR("Failed to allocate memory for the Ethernet driver, code %d", error);
-        return -ENOMEM;
-    }
+    int error;
+
+    static struct imx6_eth_data dev = {
+        .rx_size = CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT,
+        .tx_size = CONFIG_LIB_ETHDRIVER_TX_DESC_COUNT,
+    };
+
+    static struct eth_driver driver = {
+        .eth_data = &dev,
+        .dma_alignment = DMA_ALIGN,
+        .i_fn = {
+            .raw_handleIRQ  = handle_irq,
+            .print_state    = print_state,
+            .low_level_init = low_level_init,
+            .raw_tx         = raw_tx,
+            .raw_poll       = raw_poll,
+            .get_mac        = get_mac
+        },
+    };
 
     ps_fdt_cookie_t *cookie = NULL;
-    callback_args_t args = { .io_ops = io_ops, .eth_driver = eth_driver };
+    callback_args_t args = { .io_ops = io_ops, .eth_driver = &driver };
     error = ps_fdt_read_path(
                 &io_ops->io_fdt,
                 &io_ops->malloc_ops,
@@ -833,7 +812,7 @@ ethif_imx_init_module(
     plat_config.buffer_addr = args.addr;
     plat_config.prom_mode = 1;
 
-    error = ethif_imx6_init(eth_driver, *io_ops, &plat_config);
+    error = ethif_imx6_init(&driver, *io_ops, &plat_config);
     if (error) {
         LOG_ERROR("Failed to initialise the Ethernet driver, code %d", error);
         return -ENODEV;
@@ -842,7 +821,7 @@ ethif_imx_init_module(
     error = ps_interface_register(
                 &io_ops->interface_registration_ops,
                 PS_ETHERNET_INTERFACE,
-                eth_driver,
+                &driver,
                 NULL);
     if (error) {
         LOG_ERROR("Failed to register Ethernet driver interface , code %d", error);
