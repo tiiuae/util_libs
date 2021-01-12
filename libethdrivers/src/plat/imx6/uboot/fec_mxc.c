@@ -62,10 +62,12 @@ int
 fec_phy_read(
     struct mii_dev *bus,
     int phyAddr,
-    int dev_addr,
+    UNUSED int dev_addr,
     int regAddr)
 {
-    return enet_mdio_read((struct enet *)bus->priv, phyAddr, regAddr);
+    struct enet *enet = (struct enet *)bus->priv;
+    assert(enet);
+    return enet_mdio_read(enet, phyAddr, regAddr);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -73,11 +75,13 @@ int
 fec_phy_write(
     struct mii_dev *bus,
     int phyAddr,
-    int dev_addr,
+    UNUSED int dev_addr,
     int regAddr,
     uint16_t data)
 {
-    return enet_mdio_write((struct enet *)bus->priv, phyAddr, regAddr, data);
+    struct enet *enet = (struct enet *)bus->priv;
+    assert(enet);
+    return enet_mdio_write(enet, phyAddr, regAddr, data);
 }
 
 /*----------------------------------------------------------------------------
@@ -108,7 +112,7 @@ fec_halt(
 /*----------------------------------------------------------------------------*/
 int
 fec_init(
-    unsigned phy_mask,
+    unsigned int phy_mask,
     struct enet *enet)
 {
     struct eth_device *edev;

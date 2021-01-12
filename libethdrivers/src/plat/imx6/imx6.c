@@ -313,8 +313,7 @@ complete_tx(
 {
     struct imx6_eth_data *dev = (struct imx6_eth_data *)driver->eth_data;
     while (dev->tdh != dev->tdt) {
-        unsigned int i;
-        for (i = 0; i < dev->tx_lengths[dev->tdh]; i++) {
+        for (unsigned int i = 0; i < dev->tx_lengths[dev->tdh]; i++) {
             if (dev->tx_ring[(i + dev->tdh) % dev->tx_size].stat & TXD_READY) {
                 /* not all parts complete */
                 return;
@@ -353,8 +352,7 @@ handle_irq(
 {
     struct imx6_eth_data *eth_data = (struct imx6_eth_data *)driver->eth_data;
     struct enet *enet = eth_data->enet;
-    uint32_t e;
-    e = enet_clr_events(enet, NETIRQ_RXF | NETIRQ_TXF | NETIRQ_EBERR);
+    uint32_t e = enet_clr_events(enet, NETIRQ_RXF | NETIRQ_TXF | NETIRQ_EBERR);
     if (e & NETIRQ_TXF) {
         complete_tx(driver);
     }
@@ -471,11 +469,12 @@ ethif_imx6_init(
     ps_io_ops_t io_ops,
     void *config)
 {
-    struct ocotp *ocotp = NULL;
     int err;
-    struct enet *enet;
+
+    /* need to free these on error if assigned */
     struct imx6_eth_data *eth_data = NULL;
-    uint8_t mac[6];
+    struct ocotp *ocotp = NULL;
+    struct enet *enet = NULL;
 
     if (config == NULL) {
         LOG_ERROR("Cannot get platform info; Passed in Config Pointer NULL");
@@ -551,6 +550,7 @@ ethif_imx6_init(
         enet_prom_disable(enet);
     }
 
+    uint8_t mac[6];
     if (ocotp == NULL || ocotp_get_mac(ocotp, mac)) {
         memcpy(mac, DEFAULT_MAC, 6);
     }
@@ -558,7 +558,7 @@ ethif_imx6_init(
     enet_set_mac(enet, mac);
 
     /* Connect the phy to the ethernet controller */
-    unsigned phy_mask = 0xffffffff;
+    unsigned int phy_mask = 0xffffffff;
     if (fec_init(phy_mask, enet)) {
         LOG_ERROR("Failed to initialize fec");
         goto error;
@@ -658,9 +658,7 @@ ethif_imx_init_module(
     ps_io_ops_t *io_ops,
     const char *device_path)
 {
-    struct arm_eth_plat_config plat_config;
-    struct eth_driver *eth_driver;
-
+    struct eth_driver *eth_driver = NULL;
     int error = ps_calloc(
                     &io_ops->malloc_ops,
                     1,
@@ -711,6 +709,7 @@ ethif_imx_init_module(
 
     /* Setup the config and hand initialisation off to the proper
      * initialisation method */
+    struct arm_eth_plat_config plat_config;
     plat_config.buffer_addr = args.addr;
     plat_config.prom_mode = 1;
 
