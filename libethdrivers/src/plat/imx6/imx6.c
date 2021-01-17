@@ -249,7 +249,10 @@ initialize_desc_ring(
      * size many descriptors, since then the head and tail pointers would be
      * equal, indicating empty.
      */
+    assert(dev->rx_size > 2);
     dev->rx_remain = dev->rx_size - 2;
+
+    assert(dev->tx_size > 2);
     dev->tx_remain = dev->tx_size - 2;
 
     dev->rdt = dev->rdh = dev->tdt = dev->tdh = 0;
