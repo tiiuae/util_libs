@@ -678,8 +678,6 @@ ethif_imx6_init(
              phydev->speed,
              (phydev->duplex == DUPLEX_FULL) ? "full" : "half");
 
-    udelay(100000); // why?
-
     /* Start the controller */
     enet_enable(enet);
 
