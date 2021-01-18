@@ -1,5 +1,6 @@
 /*
  * Copyright 2017, Data61, CSIRO (ABN 41 687 119 230)
+ * Copyright 2020, HENSOLDT Cyber GmbH
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -59,5 +60,6 @@
  * all ZF_LOG output, settings it to ZF_LOG_FATAL will
  * only display fatal outputs.
  */
-#define LOG_ERROR(...) ZF_LOGE(__VA_ARGS__)
-#define LOG_INFO(...) ZF_LOGI(__VA_ARGS__)
+#define LOG_ERROR(...)  ZF_LOGE(__VA_ARGS__)
+#define LOG_WARN(...)   ZF_LOGW(__VA_ARGS__)
+#define LOG_INFO(...)   ZF_LOGI(__VA_ARGS__)

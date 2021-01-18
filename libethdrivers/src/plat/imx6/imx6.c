@@ -674,9 +674,9 @@ ethif_imx6_init(
         phydev->speed,
         (phydev->duplex == DUPLEX_FULL) ? 1 : 0);
 
-    printf("\n  * Link speed: %d Mbps, %s-duplex *\n\n",
-           phydev->speed,
-           (phydev->duplex == DUPLEX_FULL) ? "full" : "half");
+    LOG_INFO("Link speed: %d Mbps, %s-duplex",
+             phydev->speed,
+             (phydev->duplex == DUPLEX_FULL) ? "full" : "half");
 
     udelay(100000); // why?
 

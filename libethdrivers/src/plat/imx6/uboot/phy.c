@@ -230,19 +230,24 @@ int genphy_update_link(struct phy_device *phydev)
 	 * we don't need to wait for autoneg again
 	 */
 	if (phydev->link && mii_reg & BMSR_LSTATUS)
+    {
+        LOG_INFO("link already established");
 		return 0;
+    }
 
 	if ((mii_reg & BMSR_ANEGCAPABLE) && !(mii_reg & BMSR_ANEGCOMPLETE)) {
 		int i = 0;
 
-		printf("%s Waiting for PHY auto negotiation to complete", phydev->dev->name);
+		LOG_INFO(
+            "waiting for auto negotiation to complete on phy %d, '%s'",
+            phydev->addr, phydev->dev->name);
         fflush(stdout);
 		while (!(mii_reg & BMSR_ANEGCOMPLETE)) {
 			/*
 			 * Timeout reached ?
 			 */
 			if (i > PHY_ANEG_TIMEOUT) {
-				printf(" TIMEOUT !\n");
+				LOG_ERROR("auto negotiation timeout");
 				phydev->link = 0;
 				return 0;
 			}
@@ -255,7 +260,8 @@ int genphy_update_link(struct phy_device *phydev)
 			udelay(1000);	/* 1 ms */
 			mii_reg = phy_read(phydev, MDIO_DEVAD_NONE, MII_BMSR);
 		}
-		printf(" done\n");
+		LOG_INFO("auto negotiation complete on phy %d, '%s'",
+                 phydev->addr, phydev->dev->name);
 		phydev->link = 1;
 	} else {
 		/* Read the link a second time to clear the latched state */
