@@ -617,6 +617,12 @@ ethif_imx6_init(
     }
     dev->enet = enet;
 
+    /* Remove CRC (FCS) from ethernet frames when passing it to upper layers,
+     * because the NIC hardware would discard frames with an invalid checksum
+     * anyway by default. So there not much practical gain in keeping them.
+     * */
+    enet_crc_strip_enable(enet);
+
     /* Non-Promiscuous mode means that only traffic relevant for us is made
      * visible by the hardware, everything else is discarded automatically. We
      * will only see packets addressed to our MAC and broadcast/multicast

@@ -590,6 +590,22 @@ enet_prom_disable(
 }
 
 /*----------------------------------------------------------------------------*/
+void
+enet_crc_strip_enable(struct enet* enet)
+{
+    enet_regs_t* regs = enet_get_regs(enet);
+    regs->rcr |= RCR_CRCSTRIP;
+}
+
+/*----------------------------------------------------------------------------*/
+void
+enet_crc_strip_disable(struct enet* enet)
+{
+    enet_regs_t* regs = enet_get_regs(enet);
+    regs->rcr &= ~RCR_CRCSTRIP;
+}
+
+/*----------------------------------------------------------------------------*/
 struct enet *
 enet_init(
     uint32_t tx_phys,
