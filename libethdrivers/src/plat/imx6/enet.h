@@ -51,7 +51,7 @@ enet_init(
     uint32_t tx_phys,
     uint32_t rx_phys,
     uint32_t rx_bufsize,
-    char *mac,
+    uint64_t mac,
     ps_io_ops_t *io_ops);
 
 /* Read and write to the phy over the mdio interface */
@@ -83,12 +83,11 @@ enet_enabled(
 void
 enet_set_mac(
     struct enet *enet,
-    unsigned char* mac);
+    uint64_t mac);
 
-void
+uint64_t
 enet_get_mac(
-    struct enet *enet,
-    unsigned char* mac);
+    struct enet *enet);
 
 void
 enet_set_speed(

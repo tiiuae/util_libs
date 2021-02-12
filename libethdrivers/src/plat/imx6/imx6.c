@@ -107,16 +107,34 @@ get_enet_from_driver(
 
 /*----------------------------------------------------------------------------*/
 static void
+get_mac(
+    struct eth_driver *driver,
+    uint8_t *mac)
+{
+    assert(driver);
+    struct enet *enet = get_enet_from_driver(driver);
+    assert(enet);
+
+    uint64_t mac_u64 = enet_get_mac(enet);
+
+    /* MAC is big endian u64, 0x0000aabbccddeeff means aa:bb:cc:dd:ee:ff */
+    for (unsigned int i = 0; i < 6; i++) {
+        mac[5-i] = (uint8_t)mac_u64;
+        mac_u64 >>= 8;
+    }
+
+}
+
+/*----------------------------------------------------------------------------*/
+static void
 low_level_init(
     struct eth_driver *driver,
     uint8_t *mac,
     int *mtu)
 {
     assert(driver);
-    struct enet *enet = get_enet_from_driver(driver);
-    assert(enet);
 
-    enet_get_mac(enet, mac);
+    get_mac(driver, mac);
     *mtu = MAX_PKT_SIZE;
 }
 
@@ -540,19 +558,6 @@ raw_tx(
 }
 
 /*----------------------------------------------------------------------------*/
-static void
-get_mac(
-    struct eth_driver *driver,
-    uint8_t *mac)
-{
-    assert(driver);
-    struct enet *enet = get_enet_from_driver(driver);
-    assert(enet);
-
-    enet_get_mac(enet, (unsigned char *)mac);
-}
-
-/*----------------------------------------------------------------------------*/
 int
 ethif_imx6_init(
     struct eth_driver *driver,
@@ -582,20 +587,24 @@ ethif_imx6_init(
     LOG_INFO("obtain MAC from OCOTP");
     struct ocotp *ocotp = ocotp_init(&io_ops.io_mapper);
     if (!ocotp) {
-        LOG_ERROR("Failed to initialize OCOTP");
+        LOG_ERROR("Failed to initialize OCOTP that holds MAC");
         return -1;
     }
 
-    uint8_t mac[6] = {0};
-    err = ocotp_get_mac(ocotp, mac);
+    uint64_t mac = ocotp_get_mac(ocotp);
     ocotp_free(ocotp, &io_ops.io_mapper);
-    if (err) {
-        LOG_ERROR("Failed to get MAC from OCOTP, code %d", err);
+    if (0 == mac) {
+        LOG_ERROR("Failed to get MAC from OCOTP");
         return -1;
     }
 
     LOG_INFO("using MAC: %02x:%02x:%02x:%02x:%02x:%02x",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+             (uint8_t)(mac >> 40),
+             (uint8_t)(mac >> 32),
+             (uint8_t)(mac >> 24),
+             (uint8_t)(mac >> 16),
+             (uint8_t)(mac >> 8),
+             (uint8_t)(mac));
 
 
     struct imx6_eth_data *dev = NULL;

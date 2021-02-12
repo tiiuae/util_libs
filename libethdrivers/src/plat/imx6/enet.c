@@ -520,30 +520,24 @@ enet_disable(
 void
 enet_set_mac(
     struct enet *enet,
-    unsigned char *mac)
+    uint64_t mac)
 {
     enet_regs_t *regs = enet_get_regs(enet);
-    regs->palr = mac[0] << 24 | mac[1] << 16 | mac[2] << 8 | mac[3] << 0;
-    regs->paur = mac[4] << 24 | mac[5] << 16 | PAUSE_FRAME_TYPE_FIELD;
+
+    /* MAC is big endian u64, 0x0000aabbccddeeff means aa:bb:cc:dd:ee:ff */
+    regs->palr = (uint32_t)(mac >> 16);
+    regs->paur = (uint32_t)(mac & 0xffff) | PAUSE_FRAME_TYPE_FIELD;
 }
 
 /*----------------------------------------------------------------------------*/
-void
+uint64_t
 enet_get_mac(
-    struct enet *enet,
-    unsigned char *mac)
+    struct enet *enet)
 {
     enet_regs_t *regs = enet_get_regs(enet);
-    uint32_t macl = regs->palr;
-    uint32_t macu = regs->paur;
 
-    /* set MAC hardware address */
-    mac[0] = macl >> 24;
-    mac[1] = macl >> 16;
-    mac[2] = macl >>  8;
-    mac[3] = macl >>  0;
-    mac[4] = macu >> 24;
-    mac[5] = macu >> 16;
+    /* return MAC as big endian u64, 0x0000aabbccddeeff is aa:bb:cc:dd:ee:ff */
+    return (((uint64_t)regs->palr) << 16) | (regs->palr >> 16);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -601,7 +595,7 @@ enet_init(
     uint32_t tx_phys,
     uint32_t rx_phys,
     uint32_t rx_bufsize,
-    char *mac,
+    uint64_t mac,
     ps_io_ops_t *io_ops)
 {
     struct clock *enet_clk_ptr = NULL;

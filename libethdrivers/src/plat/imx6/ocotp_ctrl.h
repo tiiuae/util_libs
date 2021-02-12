@@ -20,7 +20,6 @@ ocotp_free(
     struct ocotp *ocotp,
     ps_io_mapper_t *io_mapper);
 
-int
+uint64_t
 ocotp_get_mac(
-    struct ocotp *ocotp,
-    unsigned char *mac);
+    struct ocotp* ocotp);
