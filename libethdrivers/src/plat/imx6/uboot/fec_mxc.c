@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2020, HENSOLDT Cyber GmbH
  */
 
 /*
@@ -56,22 +57,36 @@
 
 #undef DEBUG
 
-int fec_phy_read(struct mii_dev *bus, int phyAddr, int dev_addr, int regAddr)
+/*----------------------------------------------------------------------------*/
+int
+fec_phy_read(
+    struct mii_dev *bus,
+    int phyAddr,
+    int dev_addr,
+    int regAddr)
 {
     return enet_mdio_read((struct enet *)bus->priv, phyAddr, regAddr);
 }
 
-int fec_phy_write(struct mii_dev *bus, int phyAddr, int dev_addr, int regAddr,
-                  uint16_t data)
+/*----------------------------------------------------------------------------*/
+int
+fec_phy_write(
+    struct mii_dev *bus,
+    int phyAddr,
+    int dev_addr,
+    int regAddr,
+    uint16_t data)
 {
     return enet_mdio_write((struct enet *)bus->priv, phyAddr, regAddr, data);
 }
 
-/**
+/*----------------------------------------------------------------------------
  * Halt the FEC engine
  * @param[in] dev Our device to handle
  */
-void fec_halt(struct eth_device *dev)
+void
+fec_halt(
+    struct eth_device *dev)
 {
 #if 0
     struct fec_priv *fec = (struct fec_priv *)dev->priv;
@@ -89,7 +104,12 @@ void fec_halt(struct eth_device *dev)
     assert(!"unimplemented");
 #endif
 }
-int fec_init(unsigned phy_mask, struct enet *enet)
+
+/*----------------------------------------------------------------------------*/
+int
+fec_init(
+    unsigned phy_mask,
+    struct enet *enet)
 {
     struct eth_device *edev;
     struct phy_device *phydev;
@@ -119,7 +139,11 @@ int fec_init(unsigned phy_mask, struct enet *enet)
     }
 
     /****** Configure phy ******/
-    phydev = phy_connect_by_mask(bus, phy_mask, edev, PHY_INTERFACE_MODE_RGMII);
+    phydev = phy_connect_by_mask(
+                bus,
+                phy_mask,
+                edev,
+                PHY_INTERFACE_MODE_RGMII);
     if (!phydev) {
         return -1;
     }

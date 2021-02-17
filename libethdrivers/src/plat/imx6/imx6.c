@@ -24,8 +24,8 @@
 
 #define DEFAULT_MAC "\x00\x19\xb8\x00\xf0\xa3"
 
-#define BUF_SIZE MAX_PKT_SIZE
-#define DMA_ALIGN 32
+#define BUF_SIZE    MAX_PKT_SIZE
+#define DMA_ALIGN   32
 
 struct descriptor {
     /* NOTE: little endian packing: len before stat */
@@ -88,14 +88,22 @@ int setup_iomux_enet(ps_io_ops_t *io_ops);
 #define TXD_ADDCRC    BIT(10) /* Append a CRC to the end of the frame */
 #define TXD_ADDBADCRC BIT( 9) /* Append a bad CRC to the end of the frame */
 
-static void low_level_init(struct eth_driver *driver, uint8_t *mac, int *mtu)
+/*----------------------------------------------------------------------------*/
+static void
+low_level_init(
+    struct eth_driver *driver,
+    uint8_t *mac,
+    int *mtu)
 {
     struct imx6_eth_data *dev = (struct imx6_eth_data *)driver->eth_data;
     enet_get_mac(dev->enet, mac);
     *mtu = MAX_PKT_SIZE;
 }
 
-static void fill_rx_bufs(struct eth_driver *driver)
+/*----------------------------------------------------------------------------*/
+static void
+fill_rx_bufs(
+    struct eth_driver *driver)
 {
     struct imx6_eth_data *dev = (struct imx6_eth_data *)driver->eth_data;
     __sync_synchronize();
@@ -104,11 +112,20 @@ static void fill_rx_bufs(struct eth_driver *driver)
         void *cookie = NULL;
         int next_rdt = (dev->rdt + 1) % dev->rx_size;
 
-        // This fn ptr is either lwip_allocate_rx_buf or lwip_pbuf_allocate_rx_buf (in src/lwip.c)
-        uintptr_t phys = driver->i_cb.allocate_rx_buf ? driver->i_cb.allocate_rx_buf(driver->cb_cookie, BUF_SIZE, &cookie) : 0;
+        /* This fn ptr is either lwip_allocate_rx_buf or
+         * lwip_pbuf_allocate_rx_buf (in src/lwip.c)
+         */
+        uintptr_t phys = driver->i_cb.allocate_rx_buf ?
+                            driver->i_cb.allocate_rx_buf(
+                                driver->cb_cookie,
+                                BUF_SIZE,
+                                &cookie)
+                            : 0;
         if (!phys) {
-            // NOTE: This condition could happen if
-            //       CONFIG_LIB_ETHDRIVER_NUM_PREALLOCATED_BUFFERS < CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT
+            /* NOTE: This condition could happen if
+             *       CONFIG_LIB_ETHDRIVER_NUM_PREALLOCATED_BUFFERS is less than
+             *       CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT
+             */
             break;
         }
 
@@ -117,7 +134,8 @@ static void fill_rx_bufs(struct eth_driver *driver)
         dev->rx_ring[dev->rdt].len = 0;
 
         __sync_synchronize();
-        dev->rx_ring[dev->rdt].stat = RXD_EMPTY | (next_rdt == 0 ? RXD_WRAP : 0);
+        dev->rx_ring[dev->rdt].stat = RXD_EMPTY
+                                      | (next_rdt == 0 ? RXD_WRAP : 0);
         dev->rdt = next_rdt;
         dev->rx_remain--;
     }
@@ -127,7 +145,10 @@ static void fill_rx_bufs(struct eth_driver *driver)
     }
 }
 
-static void enable_interrupts(struct imx6_eth_data *dev)
+/*----------------------------------------------------------------------------*/
+static void
+enable_interrupts(
+    struct imx6_eth_data *dev)
 {
     struct enet *enet = dev->enet;
     assert(enet);
@@ -136,14 +157,24 @@ static void enable_interrupts(struct imx6_eth_data *dev)
     enet_enable_events(enet, (uint32_t) NETIRQ_RXF | NETIRQ_TXF | NETIRQ_EBERR);
 }
 
-static void free_desc_ring(struct imx6_eth_data *dev, ps_dma_man_t *dma_man)
+/*----------------------------------------------------------------------------*/
+static void
+free_desc_ring(
+    struct imx6_eth_data *dev,
+    ps_dma_man_t *dma_man)
 {
     if (dev->rx_ring) {
-        dma_unpin_free(dma_man, (void *)dev->rx_ring, sizeof(struct descriptor) * dev->rx_size);
+        dma_unpin_free(
+            dma_man,
+            (void *)dev->rx_ring,
+            sizeof(struct descriptor) * dev->rx_size);
         dev->rx_ring = NULL;
     }
     if (dev->tx_ring) {
-        dma_unpin_free(dma_man, (void *)dev->tx_ring, sizeof(struct descriptor) * dev->tx_size);
+        dma_unpin_free(
+            dma_man,
+            (void *)dev->tx_ring,
+            sizeof(struct descriptor) * dev->tx_size);
         dev->tx_ring = NULL;
     }
     if (dev->rx_cookies) {
@@ -160,23 +191,43 @@ static void free_desc_ring(struct imx6_eth_data *dev, ps_dma_man_t *dma_man)
     }
 }
 
-static int initialize_desc_ring(struct imx6_eth_data *dev, ps_dma_man_t *dma_man)
+/*----------------------------------------------------------------------------*/
+static int
+initialize_desc_ring(
+    struct imx6_eth_data *dev,
+    ps_dma_man_t *dma_man)
 {
-    dma_addr_t rx_ring = dma_alloc_pin(dma_man, sizeof(struct descriptor) * dev->rx_size, 0, DMA_ALIGN);
+    dma_addr_t rx_ring = dma_alloc_pin(
+                            dma_man,
+                            sizeof(struct descriptor) * dev->rx_size,
+                            0,
+                            DMA_ALIGN);
     if (!rx_ring.phys) {
         LOG_ERROR("Failed to allocate rx_ring");
         return -1;
     }
+    ps_dma_cache_clean_invalidate(
+        dma_man,
+        rx_ring.virt,
+        sizeof(struct descriptor) * dev->rx_size);
     dev->rx_ring = rx_ring.virt;
     dev->rx_ring_phys = rx_ring.phys;
-    dma_addr_t tx_ring = dma_alloc_pin(dma_man, sizeof(struct descriptor) * dev->tx_size, 0, DMA_ALIGN);
+
+    dma_addr_t tx_ring = dma_alloc_pin(
+                            dma_man,
+                            sizeof(struct descriptor) * dev->tx_size,
+                            0,
+                            DMA_ALIGN);
     if (!tx_ring.phys) {
         LOG_ERROR("Failed to allocate tx_ring");
         free_desc_ring(dev, dma_man);
         return -1;
     }
-    ps_dma_cache_clean_invalidate(dma_man, rx_ring.virt, sizeof(struct descriptor) * dev->rx_size);
-    ps_dma_cache_clean_invalidate(dma_man, tx_ring.virt, sizeof(struct descriptor) * dev->tx_size);
+    ps_dma_cache_clean_invalidate(
+        dma_man,
+        tx_ring.virt,
+        sizeof(struct descriptor) * dev->tx_size);
+
     dev->rx_cookies = malloc(sizeof(void *) * dev->rx_size);
     dev->tx_cookies = malloc(sizeof(void *) * dev->tx_size);
     dev->tx_lengths = malloc(sizeof(unsigned int) * dev->tx_size);
@@ -196,8 +247,10 @@ static int initialize_desc_ring(struct imx6_eth_data *dev, ps_dma_man_t *dma_man
     }
     dev->tx_ring = tx_ring.virt;
     dev->tx_ring_phys = tx_ring.phys;
-    /* Remaining needs to be 2 less than size as we cannot actually enqueue size many descriptors,
-     * since then the head and tail pointers would be equal, indicating empty. */
+    /* Remaining needs to be 2 less than size as we cannot actually enqueue
+     * size many descriptors, since then the head and tail pointers would be
+     * equal, indicating empty.
+     */
     dev->rx_remain = dev->rx_size - 2;
     dev->tx_remain = dev->tx_size - 2;
 
@@ -223,13 +276,18 @@ static int initialize_desc_ring(struct imx6_eth_data *dev, ps_dma_man_t *dma_man
     return 0;
 }
 
-static void complete_rx(struct eth_driver *eth_driver)
+/*----------------------------------------------------------------------------*/
+static void
+complete_rx(
+    struct eth_driver *eth_driver)
 {
     struct imx6_eth_data *dev = (struct imx6_eth_data *)eth_driver->eth_data;
     unsigned int rdt = dev->rdt;
     while (dev->rdh != rdt) {
         unsigned int status = dev->rx_ring[dev->rdh].stat;
-        /* Ensure no memory references get ordered before we checked the descriptor was written back */
+        /* Ensure no memory references get ordered before we checked the
+         * descriptor was written back
+         */
         __sync_synchronize();
         if (status & RXD_EMPTY) {
             /* not complete yet */
@@ -248,7 +306,10 @@ static void complete_rx(struct eth_driver *eth_driver)
     }
 }
 
-static void complete_tx(struct eth_driver *driver)
+/*----------------------------------------------------------------------------*/
+static void
+complete_tx(
+    struct eth_driver *driver)
 {
     struct imx6_eth_data *dev = (struct imx6_eth_data *)driver->eth_data;
     while (dev->tdh != dev->tdt) {
@@ -259,7 +320,9 @@ static void complete_tx(struct eth_driver *driver)
                 return;
             }
         }
-        /* do not let memory loads happen before our checking of the descriptor write back */
+        /* do not let memory loads happen before our checking of the descriptor
+         * write back
+         */
         __sync_synchronize();
         /* increase where we believe tdh to be */
         void *cookie = dev->tx_cookies[dev->tdh];
@@ -273,13 +336,20 @@ static void complete_tx(struct eth_driver *driver)
     }
 }
 
-static void print_state(struct eth_driver *eth_driver)
+/*----------------------------------------------------------------------------*/
+static void
+print_state(
+    struct eth_driver *eth_driver)
 {
     struct imx6_eth_data *eth_data = (struct imx6_eth_data *)eth_driver->eth_data;
     enet_print_mib(eth_data->enet);
 }
 
-static void handle_irq(struct eth_driver *driver, int irq)
+/*----------------------------------------------------------------------------*/
+static void
+handle_irq(
+    struct eth_driver *driver,
+    int irq)
 {
     struct imx6_eth_data *eth_data = (struct imx6_eth_data *)driver->eth_data;
     struct enet *enet = eth_data->enet;
@@ -300,8 +370,13 @@ static void handle_irq(struct eth_driver *driver, int irq)
     }
 }
 
+/*----------------------------------------------------------------------------*/
 /* This is a platsuport IRQ interface IRQ handler wrapper for handle_irq() */
-static void eth_irq_handle(void *data, ps_irq_acknowledge_fn_t acknowledge_fn, void *ack_data)
+static void
+eth_irq_handle(
+    void *data,
+    ps_irq_acknowledge_fn_t acknowledge_fn,
+    void *ack_data)
 {
     ZF_LOGF_IF(data == NULL, "Passed in NULL for the data");
     struct eth_driver *driver = data;
@@ -315,17 +390,29 @@ static void eth_irq_handle(void *data, ps_irq_acknowledge_fn_t acknowledge_fn, v
     }
 }
 
-static void raw_poll(struct eth_driver *driver)
+
+/*----------------------------------------------------------------------------*/
+static void
+raw_poll(
+    struct eth_driver *driver)
 {
     complete_rx(driver);
     complete_tx(driver);
     fill_rx_bufs(driver);
 }
 
-static int raw_tx(struct eth_driver *driver, unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
+/*----------------------------------------------------------------------------*/
+static int
+raw_tx(
+    struct eth_driver *driver,
+    unsigned int num,
+    uintptr_t *phys,
+    unsigned int *len,
+    void *cookie)
 {
     struct imx6_eth_data *dev = (struct imx6_eth_data *)driver->eth_data;
     struct enet *enet = dev->enet;
+
     /* Ensure we have room */
     if (dev->tx_remain < num) {
         /* try and complete some */
@@ -341,8 +428,9 @@ static int raw_tx(struct eth_driver *driver, unsigned int num, uintptr_t *phys, 
         dev->tx_ring[ring].len = len[i];
         dev->tx_ring[ring].phys = phys[i];
         __sync_synchronize();
-        dev->tx_ring[ring].stat = TXD_READY | (ring + 1 == dev->tx_size ? TXD_WRAP : 0) | (i + 1 == num ? TXD_ADDCRC |
-                                                                                           TXD_LAST : 0);
+        dev->tx_ring[ring].stat = TXD_READY
+                                  | (ring + 1 == dev->tx_size ? TXD_WRAP : 0)
+                                  | (i + 1 == num ? TXD_ADDCRC | TXD_LAST : 0);
     }
     dev->tx_cookies[dev->tdt] = cookie;
     dev->tx_lengths[dev->tdt] = num;
@@ -356,12 +444,17 @@ static int raw_tx(struct eth_driver *driver, unsigned int num, uintptr_t *phys, 
     return ETHIF_TX_ENQUEUED;
 }
 
-static void get_mac(struct eth_driver *driver, uint8_t *mac)
+/*----------------------------------------------------------------------------*/
+static void
+get_mac(
+    struct eth_driver *driver,
+    uint8_t *mac)
 {
     struct enet *enet = ((struct imx6_eth_data *)driver->eth_data)->enet;
     enet_get_mac(enet, (unsigned char *)mac);
 }
 
+/*----------------------------------------------------------------------------*/
 static struct raw_iface_funcs iface_fns = {
     .raw_handleIRQ = handle_irq,
     .print_state = print_state,
@@ -371,7 +464,12 @@ static struct raw_iface_funcs iface_fns = {
     .get_mac = get_mac
 };
 
-int ethif_imx6_init(struct eth_driver *eth_driver, ps_io_ops_t io_ops, void *config)
+/*----------------------------------------------------------------------------*/
+int
+ethif_imx6_init(
+    struct eth_driver *eth_driver,
+    ps_io_ops_t io_ops,
+    void *config)
 {
     struct ocotp *ocotp = NULL;
     int err;
@@ -417,14 +515,21 @@ int ethif_imx6_init(struct eth_driver *eth_driver, ps_io_ops_t io_ops, void *con
         LOG_ERROR("Failed to setup iomux enet");
         goto error;
     }
+
     /* Initialise the phy library */
     miiphy_init();
+
     /* Initialise the phy */
     phy_micrel_init();
+
     /* Initialise the RGMII interface */
-    enet = enet_init((struct desc_data) {
-        .tx_phys = eth_data->tx_ring_phys, .rx_phys = eth_data->rx_ring_phys, .rx_bufsize = BUF_SIZE
-    }, &io_ops);
+    enet = enet_init(
+            (struct desc_data) {
+                .tx_phys = eth_data->tx_ring_phys,
+                .rx_phys = eth_data->rx_ring_phys,
+                .rx_bufsize = BUF_SIZE
+            },
+            &io_ops);
     if (!enet) {
         LOG_ERROR("Failed to initialize RGMII");
         /* currently no way to properly clean up enet */
@@ -478,14 +583,21 @@ error:
     return -1;
 }
 
+/*----------------------------------------------------------------------------*/
 typedef struct {
-    void *addr;
     ps_io_ops_t *io_ops;
     struct eth_driver *eth_driver;
+    void *addr;
     int irq_id;
 } callback_args_t;
 
-static int allocate_register_callback(pmem_region_t pmem, unsigned curr_num, size_t num_regs, void *token)
+/*----------------------------------------------------------------------------*/
+static int
+allocate_register_callback(
+    pmem_region_t pmem,
+    unsigned curr_num,
+    size_t num_regs,
+    void *token)
 {
     if (token == NULL) {
         ZF_LOGE("Expected a token!");
@@ -504,7 +616,13 @@ static int allocate_register_callback(pmem_region_t pmem, unsigned curr_num, siz
     return 0;
 }
 
-static int allocate_irq_callback(ps_irq_t irq, unsigned curr_num, size_t num_irqs, void *token)
+/*----------------------------------------------------------------------------*/
+static int
+allocate_irq_callback(
+    ps_irq_t irq,
+    unsigned curr_num,
+    size_t num_irqs,
+    void *token)
 {
     if (token == NULL) {
         ZF_LOGE("Expected a token!");
@@ -520,7 +638,11 @@ static int allocate_irq_callback(ps_irq_t irq, unsigned curr_num, size_t num_irq
     }
 
     if (curr_num == target_num) {
-        args->irq_id = ps_irq_register(&args->io_ops->irq_ops, irq, eth_irq_handle, args->eth_driver);
+        args->irq_id = ps_irq_register(
+                            &args->io_ops->irq_ops,
+                            irq,
+                            eth_irq_handle,
+                            args->eth_driver);
         if (args->irq_id < 0) {
             ZF_LOGE("Failed to register the Ethernet device's IRQ");
             return -EIO;
@@ -530,12 +652,20 @@ static int allocate_irq_callback(ps_irq_t irq, unsigned curr_num, size_t num_irq
     return 0;
 }
 
-int ethif_imx_init_module(ps_io_ops_t *io_ops, const char *device_path)
+/*----------------------------------------------------------------------------*/
+int
+ethif_imx_init_module(
+    ps_io_ops_t *io_ops,
+    const char *device_path)
 {
     struct arm_eth_plat_config plat_config;
     struct eth_driver *eth_driver;
 
-    int error = ps_calloc(&io_ops->malloc_ops, 1, sizeof(*eth_driver), (void **) &eth_driver);
+    int error = ps_calloc(
+                    &io_ops->malloc_ops,
+                    1,
+                    sizeof(*eth_driver),
+                    (void **) &eth_driver);
     if (error) {
         ZF_LOGE("Failed to allocate memory for the Ethernet driver");
         return -ENOMEM;
@@ -543,19 +673,31 @@ int ethif_imx_init_module(ps_io_ops_t *io_ops, const char *device_path)
 
     ps_fdt_cookie_t *cookie = NULL;
     callback_args_t args = { .io_ops = io_ops, .eth_driver = eth_driver };
-    error = ps_fdt_read_path(&io_ops->io_fdt, &io_ops->malloc_ops, device_path, &cookie);
+    error = ps_fdt_read_path(
+                &io_ops->io_fdt,
+                &io_ops->malloc_ops,
+                device_path,
+                &cookie);
     if (error) {
         ZF_LOGE("Failed to read the path of the Ethernet device");
         return -ENODEV;
     }
 
-    error = ps_fdt_walk_registers(&io_ops->io_fdt, cookie, allocate_register_callback, &args);
+    error = ps_fdt_walk_registers(
+                &io_ops->io_fdt,
+                cookie,
+                allocate_register_callback,
+                &args);
     if (error) {
         ZF_LOGE("Failed to walk the Ethernet device's registers and allocate them");
         return -ENODEV;
     }
 
-    error = ps_fdt_walk_irqs(&io_ops->io_fdt, cookie, allocate_irq_callback, &args);
+    error = ps_fdt_walk_irqs(
+                &io_ops->io_fdt,
+                cookie,
+                allocate_irq_callback,
+                &args);
     if (error) {
         ZF_LOGE("Failed to walk the Ethernet device's IRQs and allocate them");
         return -ENODEV;
@@ -578,14 +720,21 @@ int ethif_imx_init_module(ps_io_ops_t *io_ops, const char *device_path)
         return -ENODEV;
     }
 
-    return ps_interface_register(&io_ops->interface_registration_ops, PS_ETHERNET_INTERFACE, eth_driver, NULL);
+    return ps_interface_register(
+                &io_ops->interface_registration_ops,
+                PS_ETHERNET_INTERFACE,
+                eth_driver,
+                NULL);
 }
 
+/*----------------------------------------------------------------------------*/
 static const char *compatible_strings[] = {
     /* Other i.MX platforms may also be compatible but the platforms that have
-     * been tested are the SABRE Lite (i.MX6Quad) and i.MX8MQ Evaluation Kit */
+     * been tested are the SABRE Lite (i.MX6Quad) and i.MX8MQ Evaluation Kit
+     */
     "fsl,imx6q-fec",
     "fsl,imx8mq-fec",
     NULL
 };
+
 PS_DRIVER_MODULE_DEFINE(imx_fec, compatible_strings, ethif_imx_init_module);

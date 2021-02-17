@@ -1,5 +1,6 @@
 /*
  * Copyright 2017, Data61, CSIRO (ABN 41 687 119 230)
+ * Copyright 2020, HENSOLDT Cyber GmbH
  *
  * SPDX-License-Identifier: GPL-2.0-only
  */
@@ -16,14 +17,18 @@
  * CCM_CGR2[CG6]
  */
 
-#ifdef CONFIG_PLAT_IMX6
+#if defined(CONFIG_PLAT_IMX6)
+
 #define IMX6_OCOTP_PADDR   0x021BC000
 #define IMX6_OCOTP_SIZE    0x00004000
-#endif
-#ifdef CONFIG_PLAT_IMX8MQ_EVK
+
+#elif defined(CONFIG_PLAT_IMX8MQ_EVK)
+
 #define IMX6_OCOTP_PADDR   0x30350000
 #define IMX6_OCOTP_SIZE    0x00010000
+
 #endif
+
 
 #define TIMING_WAIT(x)       ((x) << 22)
 #define TIMING_SREAD(x)      ((x) << 16)
@@ -158,23 +163,34 @@ struct ocotp {
 
 typedef volatile struct ocotp_regs ocotp_regs_t;
 
-static inline ocotp_regs_t *ocotp_get_regs(struct ocotp *ocotp)
+/*----------------------------------------------------------------------------*/
+static inline ocotp_regs_t *
+ocotp_get_regs(
+    struct ocotp *ocotp)
 {
     return (ocotp_regs_t *)ocotp;
 }
 
+/*----------------------------------------------------------------------------*/
 struct ocotp *
-ocotp_init(ps_io_mapper_t *io_mapper)
+ocotp_init(
+    ps_io_mapper_t *io_mapper)
 {
     return (struct ocotp *)RESOURCE(io_mapper, IMX6_OCOTP);
 }
 
-void ocotp_free(struct ocotp *ocotp, ps_io_mapper_t *io_mapper)
+/*----------------------------------------------------------------------------*/
+void
+ocotp_free(
+    struct ocotp *ocotp,
+    ps_io_mapper_t *io_mapper)
 {
     UNRESOURCE(io_mapper, IMX6_OCOTP, ocotp);
 }
 
-int ocotp_get_mac(struct ocotp *ocotp, unsigned char *mac)
+/*----------------------------------------------------------------------------*/
+int
+ocotp_get_mac(struct ocotp *ocotp, unsigned char *mac)
 {
     ocotp_regs_t *regs;
     uint32_t mac0;

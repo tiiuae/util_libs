@@ -1,5 +1,6 @@
 /*
  * Copyright 2017, Data61, CSIRO (ABN 41 687 119 230)
+ * Copyright 2020, HENSOLDT Cyber GmbH
  *
  * SPDX-License-Identifier: GPL-2.0-only
  */
@@ -19,5 +20,9 @@
  *                          functions.
  * @param[in] config        Platform Specific configuration data
  */
-int ethif_imx6_init(struct eth_driver *eth_driver, ps_io_ops_t io_ops, void *config);
+int
+ethif_imx6_init(
+    struct eth_driver *eth_driver,
+    ps_io_ops_t io_ops,
+    void *config);
 
