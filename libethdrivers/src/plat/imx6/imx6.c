@@ -461,16 +461,6 @@ get_mac(
 }
 
 /*----------------------------------------------------------------------------*/
-static struct raw_iface_funcs iface_fns = {
-    .raw_handleIRQ = handle_irq,
-    .print_state = print_state,
-    .low_level_init = low_level_init,
-    .raw_tx = raw_tx,
-    .raw_poll = raw_poll,
-    .get_mac = get_mac
-};
-
-/*----------------------------------------------------------------------------*/
 int
 ethif_imx6_init(
     struct eth_driver *driver,
@@ -478,6 +468,17 @@ ethif_imx6_init(
     void *config)
 {
     int err;
+
+    /* initialize generic driver context */
+    driver->dma_alignment = DMA_ALIGN;
+    driver->i_fn = (struct raw_iface_funcs){
+        .raw_handleIRQ   = handle_irq,
+        .print_state     = print_state,
+        .low_level_init  = low_level_init,
+        .raw_tx          = raw_tx,
+        .raw_poll        = raw_poll,
+        .get_mac         = get_mac
+    };
 
     /* need to free these on error if assigned */
     struct imx6_eth_data *dev = NULL;
@@ -501,15 +502,15 @@ ethif_imx6_init(
 
     dev->tx_size = CONFIG_LIB_ETHDRIVER_TX_DESC_COUNT;
     dev->rx_size = CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT;
-    driver->eth_data = dev;
-    driver->dma_alignment = DMA_ALIGN;
-    driver->i_fn = iface_fns;
 
     err = initialize_desc_ring(dev, &io_ops.dma_manager);
     if (err) {
         LOG_ERROR("Failed to allocate descriptor rings, code %d", err);
         goto error;
     }
+
+    /* Add initialized device context to driver */
+    driver->eth_data = dev;
 
     /* initialise the eFuse controller so we can get a MAC address */
     ocotp = ocotp_init(&io_ops.io_mapper);
@@ -582,6 +583,7 @@ ethif_imx6_init(
 
     /* done */
     return 0;
+
 error:
     if (ocotp) {
         ocotp_free(ocotp, &io_ops.io_mapper);
@@ -590,6 +592,7 @@ error:
         free_desc_ring(dev, &io_ops.dma_manager);
         free(dev);
     }
+    driver->eth_data = NULL;
     return -1;
 }
 
