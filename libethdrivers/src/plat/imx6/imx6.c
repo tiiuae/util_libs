@@ -86,6 +86,27 @@ struct imx6_eth_data {
 #define TXD_ADDCRC    BIT(10) /* Append a CRC to the end of the frame */
 #define TXD_ADDBADCRC BIT( 9) /* Append a bad CRC to the end of the frame */
 
+
+/*----------------------------------------------------------------------------*/
+static struct imx6_eth_data *
+get_dev_from_driver(
+    struct eth_driver *driver)
+{
+    assert(driver);
+    return (struct imx6_eth_data *)driver->eth_data;
+}
+
+/*----------------------------------------------------------------------------*/
+static struct enet *
+get_enet_from_driver(
+    struct eth_driver *driver)
+{
+    assert(driver);
+    struct imx6_eth_data *dev = get_dev_from_driver(driver);
+    assert(dev);
+    return dev->enet;
+}
+
 /*----------------------------------------------------------------------------*/
 static void
 low_level_init(
@@ -93,8 +114,11 @@ low_level_init(
     uint8_t *mac,
     int *mtu)
 {
-    struct imx6_eth_data *dev = (struct imx6_eth_data *)driver->eth_data;
-    enet_get_mac(dev->enet, mac);
+    assert(driver);
+    struct enet *enet = get_enet_from_driver(driver);
+    assert(enet);
+
+    enet_get_mac(enet, mac);
     *mtu = MAX_PKT_SIZE;
 }
 
@@ -103,7 +127,10 @@ static void
 fill_rx_bufs(
     struct eth_driver *driver)
 {
-    struct imx6_eth_data *dev = (struct imx6_eth_data *)driver->eth_data;
+    assert(driver);
+    struct imx6_eth_data *dev = get_dev_from_driver(driver);
+    assert(dev);
+
     __sync_synchronize();
     while (dev->rx_remain > 0) {
         /* request a buffer */
@@ -137,9 +164,15 @@ fill_rx_bufs(
         dev->rdt = next_rdt;
         dev->rx_remain--;
     }
+
     __sync_synchronize();
-    if (dev->rdt != dev->rdh && !enet_rx_enabled(dev->enet)) {
-        enet_rx_enable(dev->enet);
+
+    if (dev->rdt != dev->rdh) {
+        struct enet *enet = get_enet_from_driver(driver);
+        assert(enet);
+        if (!enet_rx_enabled(enet)) {
+            enet_rx_enable(enet);
+        }
     }
 }
 
@@ -193,58 +226,63 @@ free_desc_ring(
 static int
 initialize_desc_ring(
     struct imx6_eth_data *dev,
+    unsigned int dma_alignment,
     ps_dma_man_t *dma_man)
 {
-    dma_addr_t rx_ring = dma_alloc_pin(
+    assert(dev);
+    assert(dma_man);
+
+    /* Allocate uncached memory for RX/TX DMA descriptor rings. The function
+     * ensures that the cache is cleaned and invalidated for this area, so there
+     * are no surprises.
+     */
+    dma_addr_t ring_rx = dma_alloc_pin(
                             dma_man,
                             sizeof(struct descriptor) * dev->rx_size,
-                            0,
-                            DMA_ALIGN);
-    if (!rx_ring.phys) {
+                            0, // uncached
+                            dma_alignment);
+    if (!ring_rx.phys) {
         LOG_ERROR("Failed to allocate rx_ring");
+        free_desc_ring(dev, dma_man); // clean up and free everything
         return -1;
     }
-    ps_dma_cache_clean_invalidate(
-        dma_man,
-        rx_ring.virt,
-        sizeof(struct descriptor) * dev->rx_size);
-    dev->rx_ring = rx_ring.virt;
-    dev->rx_ring_phys = rx_ring.phys;
+    dev->rx_ring = ring_rx.virt;
+    dev->rx_ring_phys = ring_rx.phys;
 
-    dma_addr_t tx_ring = dma_alloc_pin(
+    dma_addr_t ring_tx = dma_alloc_pin(
                             dma_man,
                             sizeof(struct descriptor) * dev->tx_size,
-                            0,
-                            DMA_ALIGN);
-    if (!tx_ring.phys) {
+                            0, // uncached
+                            dma_alignment);
+    if (!ring_tx.phys) {
         LOG_ERROR("Failed to allocate tx_ring");
-        free_desc_ring(dev, dma_man);
+        free_desc_ring(dev, dma_man); // clean up and free everything
         return -1;
     }
-    ps_dma_cache_clean_invalidate(
-        dma_man,
-        tx_ring.virt,
-        sizeof(struct descriptor) * dev->tx_size);
+    dev->tx_ring = ring_tx.virt;
+    dev->tx_ring_phys = ring_tx.phys;
 
     dev->rx_cookies = malloc(sizeof(void *) * dev->rx_size);
-    dev->tx_cookies = malloc(sizeof(void *) * dev->tx_size);
-    dev->tx_lengths = malloc(sizeof(unsigned int) * dev->tx_size);
-    if (!dev->rx_cookies || !dev->tx_cookies || !dev->tx_lengths) {
-        LOG_ERROR("Failed to malloc");
-        if (dev->rx_cookies) {
-            free(dev->rx_cookies);
-        }
-        if (dev->tx_cookies) {
-            free(dev->tx_cookies);
-        }
-        if (dev->tx_lengths) {
-            free(dev->tx_lengths);
-        }
-        free_desc_ring(dev, dma_man);
+    if (!dev->rx_cookies) {
+        LOG_ERROR("Failed to malloc rx_cookies");
+        free_desc_ring(dev, dma_man); // clean up and free everything
         return -1;
     }
-    dev->tx_ring = tx_ring.virt;
-    dev->tx_ring_phys = tx_ring.phys;
+
+    dev->tx_cookies = malloc(sizeof(void *) * dev->tx_size);
+    if (!dev->tx_cookies) {
+        LOG_ERROR("Failed to malloc tx_cookies");
+        free_desc_ring(dev, dma_man); // clean up and free everything
+        return -1;
+    }
+
+    dev->tx_lengths = malloc(sizeof(unsigned int) * dev->tx_size);
+    if (!dev->tx_cookies) {
+        LOG_ERROR("Failed to malloc tx_lengths");
+        free_desc_ring(dev, dma_man); // clean up and free everything
+        return -1;
+    }
+
     /* Remaining needs to be 2 less than size as we cannot actually enqueue
      * size many descriptors, since then the head and tail pointers would be
      * equal, indicating empty.
@@ -280,9 +318,12 @@ initialize_desc_ring(
 /*----------------------------------------------------------------------------*/
 static void
 complete_rx(
-    struct eth_driver *eth_driver)
+    struct eth_driver *driver)
 {
-    struct imx6_eth_data *dev = (struct imx6_eth_data *)eth_driver->eth_data;
+    assert(driver);
+    struct imx6_eth_data *dev = get_dev_from_driver(driver);
+    assert(dev);
+
     unsigned int rdt = dev->rdt;
     while (dev->rdh != rdt) {
         unsigned int status = dev->rx_ring[dev->rdh].stat;
@@ -300,10 +341,15 @@ complete_rx(
         dev->rdh = (dev->rdh + 1) % dev->rx_size;
         dev->rx_remain++;
         /* Give the buffers back */
-        eth_driver->i_cb.rx_complete(eth_driver->cb_cookie, 1, &cookie, &len);
+        driver->i_cb.rx_complete(driver->cb_cookie, 1, &cookie, &len);
     }
-    if (dev->rdt != dev->rdh && !enet_rx_enabled(dev->enet)) {
-        enet_rx_enable(dev->enet);
+
+    if (dev->rdt != dev->rdh) {
+        struct enet *enet = get_enet_from_driver(driver);
+        assert(enet);
+        if (!enet_rx_enabled(enet)) {
+            enet_rx_enable(enet);
+        }
     }
 }
 
@@ -312,7 +358,10 @@ static void
 complete_tx(
     struct eth_driver *driver)
 {
-    struct imx6_eth_data *dev = (struct imx6_eth_data *)driver->eth_data;
+    assert(driver);
+    struct imx6_eth_data *dev = get_dev_from_driver(driver);
+    assert(dev);
+
     while (dev->tdh != dev->tdt) {
         for (unsigned int i = 0; i < dev->tx_lengths[dev->tdh]; i++) {
             if (dev->tx_ring[(i + dev->tdh) % dev->tx_size].stat & TXD_READY) {
@@ -331,18 +380,26 @@ complete_tx(
         /* give the buffer back */
         driver->i_cb.tx_complete(driver->cb_cookie, cookie);
     }
-    if (dev->tdh != dev->tdt && !enet_tx_enabled(dev->enet)) {
-        enet_tx_enable(dev->enet);
+
+    if (dev->tdh != dev->tdt) {
+        struct enet *enet = get_enet_from_driver(driver);
+        assert(enet);
+        if (!enet_tx_enabled(enet)) {
+            enet_tx_enable(enet);
+        }
     }
 }
 
 /*----------------------------------------------------------------------------*/
 static void
 print_state(
-    struct eth_driver *eth_driver)
+    struct eth_driver *driver)
 {
-    struct imx6_eth_data *eth_data = (struct imx6_eth_data *)eth_driver->eth_data;
-    enet_print_mib(eth_data->enet);
+    assert(driver);
+    struct enet *enet = get_enet_from_driver(driver);
+    assert(enet);
+
+    enet_print_mib(enet);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -351,8 +408,10 @@ handle_irq(
     struct eth_driver *driver,
     int irq)
 {
-    struct imx6_eth_data *eth_data = (struct imx6_eth_data *)driver->eth_data;
-    struct enet *enet = eth_data->enet;
+    assert(driver);
+    struct enet *enet = get_enet_from_driver(driver);
+    assert(enet);
+
     uint32_t e = enet_clr_events(enet, NETIRQ_RXF | NETIRQ_TXF | NETIRQ_EBERR);
     if (e & NETIRQ_TXF) {
         complete_tx(driver);
@@ -415,8 +474,9 @@ raw_tx(
     unsigned int *len,
     void *cookie)
 {
-    struct imx6_eth_data *dev = (struct imx6_eth_data *)driver->eth_data;
-    struct enet *enet = dev->enet;
+    assert(driver);
+    struct imx6_eth_data *dev = get_dev_from_driver(driver);
+    assert(dev);
 
     /* Ensure we have room */
     if (dev->tx_remain < num) {
@@ -442,7 +502,11 @@ raw_tx(
     dev->tx_lengths[dev->tdt] = num;
     dev->tdt = (dev->tdt + num) % dev->tx_size;
     dev->tx_remain -= num;
+
     __sync_synchronize();
+
+    struct enet *enet = get_enet_from_driver(driver);
+    assert(enet);
     if (!enet_tx_enabled(enet)) {
         enet_tx_enable(enet);
     }
@@ -456,7 +520,10 @@ get_mac(
     struct eth_driver *driver,
     uint8_t *mac)
 {
-    struct enet *enet = ((struct imx6_eth_data *)driver->eth_data)->enet;
+    assert(driver);
+    struct enet *enet = get_enet_from_driver(driver);
+    assert(enet);
+
     enet_get_mac(enet, (unsigned char *)mac);
 }
 
@@ -503,7 +570,7 @@ ethif_imx6_init(
     dev->tx_size = CONFIG_LIB_ETHDRIVER_TX_DESC_COUNT;
     dev->rx_size = CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT;
 
-    err = initialize_desc_ring(dev, &io_ops.dma_manager);
+    err = initialize_desc_ring(dev, driver->dma_alignment, &io_ops.dma_manager);
     if (err) {
         LOG_ERROR("Failed to allocate descriptor rings, code %d", err);
         goto error;
