@@ -192,32 +192,45 @@ enable_interrupts(
 static void
 free_desc_ring(
     struct imx6_eth_data *dev,
-    ps_dma_man_t *dma_man)
+    ps_io_ops_t *io_ops)
 {
     if (dev->rx_ring) {
         dma_unpin_free(
-            dma_man,
+            &io_ops->dma_manager,
             (void *)dev->rx_ring,
             sizeof(struct descriptor) * dev->rx_size);
         dev->rx_ring = NULL;
     }
+
     if (dev->tx_ring) {
         dma_unpin_free(
-            dma_man,
+            &io_ops->dma_manager,
             (void *)dev->tx_ring,
             sizeof(struct descriptor) * dev->tx_size);
         dev->tx_ring = NULL;
     }
+
     if (dev->rx_cookies) {
-        free(dev->rx_cookies);
+        ps_free(
+            &io_ops->malloc_ops,
+            sizeof(void *) * dev->rx_size,
+            dev->rx_cookies);
         dev->rx_cookies = NULL;
     }
+
     if (dev->tx_cookies) {
-        free(dev->tx_cookies);
+        ps_free(
+            &io_ops->malloc_ops,
+            sizeof(void *) * dev->tx_size,
+            dev->tx_cookies);
         dev->tx_cookies = NULL;
     }
+
     if (dev->tx_lengths) {
-        free(dev->tx_lengths);
+        ps_free(
+            &io_ops->malloc_ops,
+            sizeof(void *) * dev->tx_size,
+            dev->tx_lengths);
         dev->tx_lengths = NULL;
     }
 }
@@ -227,60 +240,70 @@ static int
 initialize_desc_ring(
     struct imx6_eth_data *dev,
     unsigned int dma_alignment,
-    ps_dma_man_t *dma_man)
+    ps_io_ops_t *io_ops)
 {
+    int error;
+
     assert(dev);
-    assert(dma_man);
+    assert(io_ops);
 
     /* Allocate uncached memory for RX/TX DMA descriptor rings. The function
      * ensures that the cache is cleaned and invalidated for this area, so there
      * are no surprises.
      */
     dma_addr_t ring_rx = dma_alloc_pin(
-                            dma_man,
+                            &io_ops->dma_manager,
                             sizeof(struct descriptor) * dev->rx_size,
                             0, // uncached
                             dma_alignment);
     if (!ring_rx.phys) {
         LOG_ERROR("Failed to allocate rx_ring");
-        free_desc_ring(dev, dma_man); // clean up and free everything
-        return -1;
+        goto error;
     }
     dev->rx_ring = ring_rx.virt;
     dev->rx_ring_phys = ring_rx.phys;
 
     dma_addr_t ring_tx = dma_alloc_pin(
-                            dma_man,
+                            &io_ops->dma_manager,
                             sizeof(struct descriptor) * dev->tx_size,
                             0, // uncached
                             dma_alignment);
     if (!ring_tx.phys) {
         LOG_ERROR("Failed to allocate tx_ring");
-        free_desc_ring(dev, dma_man); // clean up and free everything
-        return -1;
+        goto error;
     }
     dev->tx_ring = ring_tx.virt;
     dev->tx_ring_phys = ring_tx.phys;
 
-    dev->rx_cookies = malloc(sizeof(void *) * dev->rx_size);
-    if (!dev->rx_cookies) {
-        LOG_ERROR("Failed to malloc rx_cookies");
-        free_desc_ring(dev, dma_man); // clean up and free everything
-        return -1;
+    error = ps_calloc(
+                &io_ops->malloc_ops,
+                dev->rx_size,
+                sizeof(void *),
+                (void **)&dev->rx_cookies);
+    if (error) {
+        LOG_ERROR("ps_calloc() failed for rx_cookies, code %d", error);
+        goto error;
     }
 
-    dev->tx_cookies = malloc(sizeof(void *) * dev->tx_size);
-    if (!dev->tx_cookies) {
-        LOG_ERROR("Failed to malloc tx_cookies");
-        free_desc_ring(dev, dma_man); // clean up and free everything
-        return -1;
+    error = ps_calloc(
+                &io_ops->malloc_ops,
+                dev->tx_size,
+                sizeof(void *),
+                (void **)&dev->tx_cookies);
+
+    if (error) {
+        LOG_ERROR("ps_calloc() failed for tx_cookies, code %d", error);
+        goto error;
     }
 
-    dev->tx_lengths = malloc(sizeof(unsigned int) * dev->tx_size);
-    if (!dev->tx_cookies) {
-        LOG_ERROR("Failed to malloc tx_lengths");
-        free_desc_ring(dev, dma_man); // clean up and free everything
-        return -1;
+    error = ps_calloc(
+                &io_ops->malloc_ops,
+                dev->tx_size,
+                sizeof(void *),
+                (void **)&dev->tx_lengths);
+    if (error) {
+        LOG_ERROR("ps_calloc() failed for tx_lengths, code %d", error);
+        goto error;
     }
 
     /* Remaining needs to be 2 less than size as we cannot actually enqueue
@@ -313,6 +336,10 @@ initialize_desc_ring(
     __sync_synchronize();
 
     return 0;
+
+error:
+    free_desc_ring(dev, io_ops); // clean up and free everything
+    return -1;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -559,9 +586,13 @@ ethif_imx6_init(
 
     struct arm_eth_plat_config *plat_config = (struct arm_eth_plat_config *)config;
 
-    dev = (struct imx6_eth_data *)malloc(sizeof(struct imx6_eth_data));
-    if (dev == NULL) {
-        LOG_ERROR("Failed to allocate eth data struct");
+    err = ps_calloc(
+            &io_ops.malloc_ops,
+            1,
+            sizeof(struct imx6_eth_data),
+            (void **)&dev);
+    if (err) {
+        LOG_ERROR("ps_calloc() failed for eth data struct, code %d", err);
         return -1;
     }
 
@@ -570,7 +601,7 @@ ethif_imx6_init(
     dev->tx_size = CONFIG_LIB_ETHDRIVER_TX_DESC_COUNT;
     dev->rx_size = CONFIG_LIB_ETHDRIVER_RX_DESC_COUNT;
 
-    err = initialize_desc_ring(dev, driver->dma_alignment, &io_ops.dma_manager);
+    err = initialize_desc_ring(dev, driver->dma_alignment, &io_ops);
     if (err) {
         LOG_ERROR("Failed to allocate descriptor rings, code %d", err);
         goto error;
@@ -656,8 +687,8 @@ error:
         ocotp_free(ocotp, &io_ops.io_mapper);
     }
     if (dev) {
-        free_desc_ring(dev, &io_ops.dma_manager);
-        free(dev);
+        free_desc_ring(dev, &io_ops);
+        ps_free(&io_ops.malloc_ops, sizeof(*dev), dev);
     }
     driver->eth_data = NULL;
     return -1;
