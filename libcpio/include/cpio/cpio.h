@@ -49,8 +49,8 @@ struct cpio_info {
  * @return             The location of the file in memory; NULL if the index
  *                     exceeds the number of files in the CPIO archive.
  */
-void *cpio_get_entry(
-    void *archive,
+void const *cpio_get_entry(
+    const void *archive,
     unsigned long len,
     int index,
     const char **name,
@@ -64,8 +64,8 @@ void *cpio_get_entry(
  * @return             The location of the file in memory; NULL if the file
  *                     does not exist.
  */
-void *cpio_get_file(
-    void *archive,
+void const *cpio_get_file(
+    const void *archive,
     unsigned long len,
     const char *name,
     unsigned long *size);
@@ -77,7 +77,7 @@ void *cpio_get_file(
  * @return             Non-zero on error.
  */
 int cpio_info(
-    void *archive,
+    void const *archive,
     unsigned long len,
     struct cpio_info *info);
 
@@ -89,7 +89,7 @@ int cpio_info(
  * @param[in] buf_len  The length of the provided buf
  */
 void cpio_ls(
-    void *archive,
+    const void *archive,
     unsigned long len,
     char **buf,
     unsigned long buf_len);
