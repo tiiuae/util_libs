@@ -18,13 +18,17 @@ struct cpio_header_info {
 };
 
 /* Align 'n' up to the value 'align', which must be a power of two. */
-static unsigned long align_up(unsigned long n, unsigned long align)
+static unsigned long align_up(
+    unsigned long n,
+    unsigned long align)
 {
     return (n + align - 1) & (~(align - 1));
 }
 
 /* Parse an ASCII hex string into an integer. */
-static unsigned long parse_hex_str(char *s, unsigned int max_len)
+static unsigned long parse_hex_str(
+    char *s,
+    unsigned int max_len)
 {
     unsigned long r = 0;
     unsigned long i;
@@ -51,7 +55,10 @@ static unsigned long parse_hex_str(char *s, unsigned int max_len)
  * We re-implement the wheel to avoid dependencies on 'libc', required for
  * certain environments that are particularly impoverished.
  */
-static int cpio_strncmp(const char *a, const char *b, unsigned long n)
+static int cpio_strncmp(
+    const char *a,
+    const char *b,
+    unsigned long n)
 {
     unsigned long i;
     for (i = 0; i < n; i++) {
@@ -69,7 +76,10 @@ static int cpio_strncmp(const char *a, const char *b, unsigned long n)
  * This is an implementation of string copy because, cpi doesn't want to
  * use string.h.
  */
-static char* cpio_strcpy(char *to, const char *from) {
+static char *cpio_strcpy(
+    char *to,
+    const char *from)
+{
     char *save = to;
     while (*from != 0) {
         *to = *from;
@@ -79,15 +89,21 @@ static char* cpio_strcpy(char *to, const char *from) {
     return save;
 }
 
-static unsigned int cpio_strlen(const char *str) {
+static unsigned int cpio_strlen(
+    const char *str)
+{
     const char *s;
     for (s = str; *s; ++s) {}
     return (s - str);
 }
 
 /* Calculate the remaining length in a CPIO file after reading a header. */
-static unsigned long cpio_len_next(unsigned long len, void *prev, void *next) {
-    unsigned long diff = (unsigned long) (next - prev);
+static unsigned long cpio_len_next(
+    unsigned long len,
+    void *prev,
+    void *next)
+{
+    unsigned long diff = (unsigned long)(next - prev);
     if (len < diff) {
         return 0;
     }
@@ -99,8 +115,10 @@ static unsigned long cpio_len_next(unsigned long len, void *prev, void *next) {
  *
  * Return -1 if the header is not valid, 1 if it is EOF.
  */
-int cpio_parse_header(struct cpio_header *archive, unsigned long len,
-        struct cpio_header_info *info)
+int cpio_parse_header(
+    struct cpio_header *archive,
+    unsigned long len,
+    struct cpio_header_info *info)
 {
     const char *filename;
     unsigned long filesize;
@@ -135,13 +153,13 @@ int cpio_parse_header(struct cpio_header *archive, unsigned long len,
 
     /* Ensure filename is not the trailer indicating EOF. */
     if (filename_length >= sizeof(CPIO_FOOTER_MAGIC) && cpio_strncmp(filename,
-                CPIO_FOOTER_MAGIC, sizeof(CPIO_FOOTER_MAGIC)) == 0) {
+                                                                     CPIO_FOOTER_MAGIC, sizeof(CPIO_FOOTER_MAGIC)) == 0) {
         return 1;
     }
 
     /* Find offset to data. */
     data = (void *) align_up((unsigned long) archive + sizeof(struct cpio_header) +
-            filename_length, CPIO_ALIGNMENT);
+                             filename_length, CPIO_ALIGNMENT);
     next = (struct cpio_header *) align_up((unsigned long) data + filesize, CPIO_ALIGNMENT);
 
     if (info) {
@@ -162,7 +180,12 @@ int cpio_parse_header(struct cpio_header *archive, unsigned long len,
  *
  * Runs in O(n) time.
  */
-void *cpio_get_entry(void *archive, unsigned long len, int n, const char **name, unsigned long *size)
+void *cpio_get_entry(
+    void *archive,
+    unsigned long len,
+    int n,
+    const char **name,
+    unsigned long *size)
 {
     struct cpio_header *header = archive;
     struct cpio_header_info header_info;
@@ -194,7 +217,11 @@ void *cpio_get_entry(void *archive, unsigned long len, int n, const char **name,
  *
  * Runs in O(n) time.
  */
-void *cpio_get_file(void *archive, unsigned long len, const char *name, unsigned long *size)
+void *cpio_get_file(
+    void *archive,
+    unsigned long len,
+    const char *name,
+    unsigned long *size)
 {
     struct cpio_header *header = archive;
     struct cpio_header_info header_info;
@@ -218,12 +245,18 @@ void *cpio_get_file(void *archive, unsigned long len, const char *name, unsigned
     return header_info.data;
 }
 
-int cpio_info(void *archive, unsigned long len, struct cpio_info *info) {
+int cpio_info(
+    void *archive,
+    unsigned long len,
+    struct cpio_info *info)
+{
     struct cpio_header *header;
     unsigned long current_path_sz;
     struct cpio_header_info header_info;
 
-    if (info == NULL) return 1;
+    if (info == NULL) {
+        return 1;
+    }
     info->file_count = 0;
     info->max_path_sz = 0;
 
@@ -250,7 +283,12 @@ int cpio_info(void *archive, unsigned long len, struct cpio_info *info) {
     return 0;
 }
 
-void cpio_ls(void *archive, unsigned long len, char **buf, unsigned long buf_len) {
+void cpio_ls(
+    void *archive,
+    unsigned long len,
+    char **buf,
+    unsigned long buf_len)
+{
     struct cpio_header *header;
     struct cpio_header_info header_info;
 
@@ -258,7 +296,9 @@ void cpio_ls(void *archive, unsigned long len, char **buf, unsigned long buf_len
     for (unsigned long i = 0; i < buf_len; i++) {
         int error = cpio_parse_header(header, len, &header_info);
         // Break on an error or nothing left to read.
-        if (error) break;
+        if (error) {
+            break;
+        }
         cpio_strcpy(buf[i], header_info.filename);
         len = cpio_len_next(len, header, header_info.next);
         header = header_info.next;
