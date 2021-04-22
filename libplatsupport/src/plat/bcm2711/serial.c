@@ -16,10 +16,10 @@
 /* When DLAB=1, MU_IO is a baud rate register.
  * Otherwise, write to TX, read to RX */
 #define MU_IO       0x40
-/* When DLAB=1, MU_IIR is a baud rate register.
+/* When DLAB=1, MU_IER is a baud rate register.
  * Otherwise IRQ enable */
-#define MU_IIR      0x44
-#define MU_IER      0x48
+#define MU_IER      0x44
+#define MU_IIR      0x48
 #define MU_LCR      0x4C
 #define MU_MCR      0x50
 #define MU_LSR      0x54
@@ -39,8 +39,9 @@
 #define MU_LCR_BREAK     BIT(6)
 #define MU_LCR_DATASIZE  BIT(0)
 
-static void uart_handle_irq(ps_chardevice_t *d UNUSED)
+static void uart_handle_irq(ps_chardevice_t *d)
 {
+    *REG_PTR(d->vaddr, MU_IER) = 5;
 }
 
 int uart_putchar(ps_chardevice_t *d, int c)
@@ -51,7 +52,7 @@ int uart_putchar(ps_chardevice_t *d, int c)
     return 0;
 }
 
-int uart_getchar(ps_chardevice_t *d UNUSED)
+int uart_getchar(ps_chardevice_t* d)
 {
     while (!(*REG_PTR(d->vaddr, MU_LSR) & MU_LSR_DATAREADY));
     return *REG_PTR(d->vaddr, MU_IO);
@@ -78,5 +79,6 @@ int uart_init(const struct dev_defn *defn,
     dev->ioops      = *ops;
     dev->flags      = SERIAL_AUTO_CR;
 
+    *REG_PTR(dev->vaddr, MU_IER) = 5;
     return 0;
 }
