@@ -54,8 +54,11 @@ int uart_putchar(ps_chardevice_t *d, int c)
 
 int uart_getchar(ps_chardevice_t* d)
 {
-    while (!(*REG_PTR(d->vaddr, MU_LSR) & MU_LSR_DATAREADY));
-    return *REG_PTR(d->vaddr, MU_IO);
+    int c = EOF;
+    if (*REG_PTR(d->vaddr, MU_LSR) & MU_LSR_DATAREADY) {
+        c = *REG_PTR(d->vaddr, MU_IO);
+    }
+    return c;
 }
 
 int uart_init(const struct dev_defn *defn,
