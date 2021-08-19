@@ -13,6 +13,8 @@
 #include "../../common.h"
 #include <utils/util.h>
 
+#if !defined(CONFIG_PLAT_XAVIERNX)
+
 static const int uartA_irqs[] = {UARTA_IRQ, -1};
 static const int uartB_irqs[] = {UARTB_IRQ, -1};
 static const int uartC_irqs[] = {UARTC_IRQ, -1};
@@ -59,3 +61,4 @@ ps_cdev_init(enum chardev_id id, const ps_io_ops_t* o, struct ps_chardevice* d) 
     }
     return NULL;
 }
+#endif
