@@ -3,11 +3,14 @@
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
+
 #include <stdlib.h>
 #include <platsupport/serial.h>
 #include <platsupport/plat/serial.h>
 #include <string.h>
 #include <utils/fence.h>
+
+#if !defined(CONFIG_PLAT_XAVIERNX)
 
 #include "../../chardev.h"
 
@@ -755,3 +758,4 @@ uart_init(const struct dev_defn* defn,
     dev->ioops = *ops;
     return ret;
 }
+#endif

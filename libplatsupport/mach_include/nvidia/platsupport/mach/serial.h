@@ -30,6 +30,8 @@ enum chardev_id {
     NV_UARTB_ASYNC,
     NV_UARTC_ASYNC,
     NV_UARTD_ASYNC,
+    /* Tegra common UART */
+    NV_TCU,
     /* Aliases */
     PS_SERIAL0 = NV_UARTA,
     PS_SERIAL1 = NV_UARTB,

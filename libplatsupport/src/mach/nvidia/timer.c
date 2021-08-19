@@ -200,7 +200,7 @@ int nv_tmr_init(nv_tmr_t *tmr, ps_io_ops_t ops, char *device_path, ltimer_callba
      * If the platform specific code becomes any larger, then it should be considered
      * moving into a per platform nv_timer_plat_init function
      */
-#ifdef CONFIG_PLAT_TX2
+#if defined(CONFIG_PLAT_TX2) || defined(CONFIG_PLAT_XAVIERNX)
     /* Route the interrupt to the correct shared interrupt number. */
     tmr->tmr_shared_map->TKEIE[NV_TMR_ID] = BIT(NV_TMR_ID);
 #else
