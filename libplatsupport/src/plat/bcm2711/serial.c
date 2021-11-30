@@ -125,6 +125,9 @@ int uart_gpio_configure(enum chardev_id id, const ps_io_ops_t *o)
         return -1;
     }
 
+    ZF_LOGD("TX pin/alt function: %i / %i", tx_pin, alt_function );
+    ZF_LOGD("RX pin/alt function: %i / %i", rx_pin, alt_function );
+
     // configure tx pin
     gpio_sys.init(&gpio_sys, tx_pin, 0, &gpio);
     bcm2711_gpio_fsel(&gpio, alt_function);
