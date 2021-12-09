@@ -39,8 +39,12 @@ mini_uart_regs_t;
 #define MU_LCR_BREAK     BIT(6)
 #define MU_LCR_DATASIZE  BIT(0)
 
+#define MU_IER_RXIRQ     BIT(1)
+#define MU_IER_TXIRQ     BIT(0)
+
 static void mini_uart_handle_irq(ps_chardevice_t *dev)
 {
+    ((mini_uart_regs_t *)dev->vaddr)->mu_ier = (MU_IER_RXIRQ | MU_IER_TXIRQ);
 }
 
 int mini_uart_init(const struct dev_defn *defn,
@@ -78,13 +82,20 @@ int mini_uart_init(const struct dev_defn *defn,
     dev->ioops      = *ops;
     dev->flags      = SERIAL_AUTO_CR;
 
+    /* Enable RX/TX interrupts */
+    ((mini_uart_regs_t *)dev->vaddr)->mu_ier = (MU_IER_RXIRQ | MU_IER_TXIRQ);
+
     return 0;
 }
 
 int mini_uart_getchar(ps_chardevice_t *d)
 {
-    while (!((mini_uart_regs_t *)d->vaddr)->mu_lsr & MU_LSR_DATAREADY);
-    return ((mini_uart_regs_t *)d->vaddr)->mu_io;
+    int c = EOF;
+    if (((mini_uart_regs_t *)d->vaddr)->mu_lsr & MU_LSR_DATAREADY) {
+        c = ((mini_uart_regs_t *)d->vaddr)->mu_io;
+    }
+
+    return c;
 }
 
 int mini_uart_putchar(ps_chardevice_t *d, int c)
