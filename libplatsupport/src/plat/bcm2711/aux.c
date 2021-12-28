@@ -8,32 +8,18 @@
 #include <platsupport/plat/aux.h>
 #include "../../services.h"
 
-/* AUX IRQ Register, BCM2711 TRM page 13. */
-typedef union {
-    struct PACKED {
-        unsigned MINIUART_IRQ : 1; /* Mini-UART IRQ pending status bit. */
-        unsigned SPI1_IRQ     : 1; /* AUX SPI1 IRQ pending status bit. */
-        unsigned SPI2_IRQ     : 1; /* AUX SPI2 IRQ pending status bit. */
-        unsigned reserved1    : 29;
-    };
-    uint32_t raw_32;
-} aux_irq_reg_t;
+#define AUX_IRQ_MINIUART_IRQ  BIT(0) /* Mini-UART IRQ pending status bit. */
+#define AUX_IRQ_SPI1_IRQ      BIT(1) /* AUX SPI1 IRQ pending status bit. */
+#define AUX_IRQ_SPI2_IRQ      BIT(2) /* AUX SPI2 IRQ pending status bit. */
 
-/* AUX ENABles Register, BCM2711 TRM page 14. */
-typedef union {
-    struct PACKED {
-        unsigned MINIUART_ENA : 1; /* Mini-UART enable/disable bit. */
-        unsigned SPI1_ENA     : 1; /* AUX SPI1 enable/disable bit. */
-        unsigned SPI2_ENA     : 1; /* AUX SPI2 enable/disable bit. */
-        unsigned reserved1    : 29;
-    };
-    uint32_t raw_32;
-} aux_enab_reg_t;
+#define AUX_ENA_MINIUART_ENA  BIT(0) /* Mini-UART enable/disable bit. */
+#define AUX_ENA_SPI1_ENA      BIT(1) /* AUX SPI1 enable/disable bit. */
+#define AUX_ENA_SPI2_ENA      BIT(2) /* AUX SPI2 enable/disable bit. */
 
 /* AUX registers definition. */
-typedef volatile struct PACKED_ALIGN(4) {
-    const aux_irq_reg_t    aux_irq;        // 0x00: AUX IRQ pending status READ-ONLY
-    aux_enab_reg_t         aux_ena;        // 0x04: AUX device enable/disable
+typedef volatile struct {
+    uint32_t    aux_irq;  // 0x00: AUX IRQ pending status READ-ONLY
+    uint32_t    aux_ena;  // 0x04: AUX device enable/disable
 } bcm2711_aux_regs_t;
 
 
@@ -41,9 +27,9 @@ static struct bcm2711_aux {
     bcm2711_aux_regs_t *regs;
 } aux_ctx;
 
-
-#define PRIV_TO_CTX(sys)    ((struct bcm2711_aux *)sys->priv)
-#define AUX_GET_REGS(sys)   (((struct bcm2711_aux *)sys->priv)->regs)
+static inline bcm2711_aux_regs_t* aux_get_regs(aux_sys_t* aux_sys){
+    return (((struct bcm2711_aux *)aux_sys->priv)->regs);
+};
 
 
 static int bcm2711_aux_get_irq_stat(aux_sys_t *aux_sys, aux_dev_id_t id)
@@ -52,17 +38,18 @@ static int bcm2711_aux_get_irq_stat(aux_sys_t *aux_sys, aux_dev_id_t id)
     assert(aux_sys->priv);
 
     int ret = 0;
+    bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
 
     switch (id)
     {
         case BCM2711_AUX_UART:
-            ret = (int) AUX_GET_REGS(aux_sys)->aux_irq.MINIUART_IRQ;
+            ret = (int) (regs->aux_irq & AUX_IRQ_MINIUART_IRQ);
             break;
         case BCM2711_AUX_SPI1:
-            ret = (int) AUX_GET_REGS(aux_sys)->aux_irq.SPI1_IRQ;
+            ret = (int) (regs->aux_irq & AUX_IRQ_SPI1_IRQ);
             break;
         case BCM2711_AUX_SPI2:
-            ret = (int) AUX_GET_REGS(aux_sys)->aux_irq.SPI2_IRQ;
+            ret = (int) (regs->aux_irq & AUX_IRQ_SPI2_IRQ);
             break;
         default:
             ZF_LOGE("AUX device ID is not in valid range!");
@@ -79,17 +66,18 @@ static int bcm2711_aux_enable(aux_sys_t *aux_sys, aux_dev_id_t id)
     assert(aux_sys->priv);
 
     int ret = 0;
+    bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
 
     switch (id)
     {
         case BCM2711_AUX_UART:
-            AUX_GET_REGS(aux_sys)->aux_ena.MINIUART_ENA = 1;
+            regs->aux_ena |= AUX_ENA_MINIUART_ENA;
             break;
         case BCM2711_AUX_SPI1:
-            AUX_GET_REGS(aux_sys)->aux_ena.SPI1_ENA = 1;
+            regs->aux_ena |= AUX_ENA_SPI1_ENA;
             break;
         case BCM2711_AUX_SPI2:
-            AUX_GET_REGS(aux_sys)->aux_ena.SPI2_ENA = 1;
+            regs->aux_ena |= AUX_ENA_SPI2_ENA;
             break;
         default:
             ZF_LOGE("AUX device ID is not in valid range!");
@@ -106,17 +94,18 @@ static int bcm2711_aux_disable(aux_sys_t *aux_sys, aux_dev_id_t id)
     assert(aux_sys->priv);
     
     int ret = 0;
+    bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
 
     switch (id)
     {
         case BCM2711_AUX_UART:
-            AUX_GET_REGS(aux_sys)->aux_ena.MINIUART_ENA = 0;
+            regs->aux_ena &= ~AUX_ENA_MINIUART_ENA;
             break;
         case BCM2711_AUX_SPI1:
-            AUX_GET_REGS(aux_sys)->aux_ena.SPI1_ENA = 0;
+            regs->aux_ena &= ~AUX_ENA_SPI1_ENA;
             break;
         case BCM2711_AUX_SPI2:
-            AUX_GET_REGS(aux_sys)->aux_ena.SPI2_ENA = 0;
+            regs->aux_ena &= ~AUX_ENA_SPI2_ENA;
             break;
         default:
             ZF_LOGE("AUX device ID is not in valid range!");
