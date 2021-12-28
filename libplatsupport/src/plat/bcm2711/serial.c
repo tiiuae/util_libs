@@ -73,11 +73,13 @@ int uart_gpio_configure(enum chardev_id id, const ps_io_ops_t *o)
         tx_pin = 14;
         rx_pin = 15;
         alt_function = BCM2711_GPIO_FSEL_ALT0;
+        break;
     case 1:
         // UART 1 uses GPIO pins 14-15
         tx_pin = 14;
         rx_pin = 15;
         alt_function = BCM2711_GPIO_FSEL_ALT5;
+        break;
     case 2:
         // UART 2 uses GPIO pins 0-3
         tx_pin = 0;
@@ -125,9 +127,6 @@ int uart_gpio_configure(enum chardev_id id, const ps_io_ops_t *o)
         return -1;
     }
 
-    ZF_LOGD("TX pin/alt function: %i / %i", tx_pin, alt_function );
-    ZF_LOGD("RX pin/alt function: %i / %i", rx_pin, alt_function );
-
     // configure tx pin
     gpio_sys.init(&gpio_sys, tx_pin, 0, &gpio);
     bcm2711_gpio_fsel(&gpio, alt_function);
@@ -164,7 +163,11 @@ int uart_init(const struct dev_defn *defn,
         break;
     }
 
-    uart_gpio_configure(defn->id, ops);
+    int ret = uart_gpio_configure(defn->id, ops);
+    if(0 != ret) {
+        ZF_LOGF("UART GPIO configuration failed. %i", ret);
+        return -ENOSYS;
+    }
 
     uart_funcs.uart_init(defn, ops, dev);
 
