@@ -34,14 +34,26 @@ config_choice(
     "ega;LibPlatSupportX86ConsoleDeviceEGA;LIB_PLAT_SUPPORT_SERIAL_TEXT_EGA;KernelPlatPC99"
 )
 
+set(LibPlatSupportMach "")
+if(KernelPlatformRpi3 OR KernelPlatformRpi4)
+    set(LibPlatSupportMach "bcm283x")
+elseif(NOT ${KernelArmMach} STREQUAL "")
+    # falling back to kernel settings is done to keep legacy compatibility
+    set(LibPlatSupportMach "${KernelArmMach}")
+endif()
+
 file(
     GLOB
         deps
-        src/mach/${KernelArmMach}/*.c
         src/plat/${KernelPlatform}/*.c
         src/*.c
         src/plat/${KernelPlatform}/acpi/*.c
 )
+
+if(NOT ${LibPlatSupportMach} STREQUAL "")
+    file(GLOB lib_deps "src/mach/${LibPlatSupportMach}/*.c")
+    list(APPEND deps ${lib_deps})
+endif()
 
 if(${KernelArch} STREQUAL "arm")
     list(APPEND deps src/arch/arm/clock.c)
@@ -76,13 +88,13 @@ if(KernelPlatformQEMUArmVirt)
 endif()
 
 if(KernelPlatformExynos5422)
-    list(APPEND deps src/mach/${KernelArmMach}/clock/exynos_5422_clock.c)
+    list(APPEND deps src/mach/${LibPlatSupportMach}/clock/exynos_5422_clock.c)
 elseif(KernelPlatformExynos4 OR KernelPlatformExynos5410 OR KernelPlatformExynos5250)
-    list(APPEND deps src/mach/${KernelArmMach}/clock/exynos_common_clock.c)
+    list(APPEND deps src/mach/${LibPlatSupportMach}/clock/exynos_common_clock.c)
 endif()
 
 if(KernelPlatImx6 OR KernelPlatformImx7Sabre)
-    list(APPEND deps src/mach/${KernelArmMach}/epit/epit.c)
+    list(APPEND deps src/mach/${LibPlatSupportMach}/epit/epit.c)
 endif()
 
 if(
@@ -91,7 +103,7 @@ if(
     OR KernelPlatformImx8mq-evk
     OR KernelPlatformImx8mm-evk
 )
-    list(APPEND deps src/mach/${KernelArmMach}/serial/serial.c)
+    list(APPEND deps src/mach/${LibPlatSupportMach}/serial/serial.c)
 endif()
 
 if(KernelPlatformImx8mq-evk OR KernelPlatformImx8mm-evk)
@@ -99,6 +111,15 @@ if(KernelPlatformImx8mq-evk OR KernelPlatformImx8mm-evk)
     # There's no clock driver at the moment, but this is to allow the
     # libethdrivers to build for imx8mq
     list(APPEND deps src/plat/imx8m/clock.c)
+endif()
+
+if(KernelPlatPC99)
+    set_source_files_properties(
+        src/plat/pc99/keyboard_vkey.c
+        PROPERTIES
+        COMPILE_FLAGS
+        -Wno-initializer-overrides
+    )
 endif()
 
 list(SORT deps)
@@ -118,8 +139,8 @@ if(KernelPlatformZynqmpZcu102 OR KernelPlatformZynqmpUltra96)
     target_include_directories(platsupport PUBLIC plat_include/zynqmp)
 endif()
 
-if(NOT "${KernelArmMach}" STREQUAL "")
-    target_include_directories(platsupport PUBLIC mach_include/${KernelArmMach})
+if(NOT "${LibPlatSupportMach}" STREQUAL "")
+    target_include_directories(platsupport PUBLIC mach_include/${LibPlatSupportMach})
 endif()
 
 # special handling for "arm_hyp", it's an add-on-hack over "aarch32"

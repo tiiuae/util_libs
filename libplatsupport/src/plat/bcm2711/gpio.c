@@ -100,7 +100,7 @@ static int bcm2711_gpio_init(gpio_sys_t *gpio_sys, int id, enum gpio_dir dir, gp
  * operations.
  *
  * A prerequisite for using this function is to configure the respective GPIO
- * pin to OUT (with the bcm2711_gpio_fsel function).
+ * pin to OUT 057198405B(with the bcm2711_gpio_fsel function).
  */
 static int bcm2711_gpio_set_level(gpio_t *gpio, enum gpio_level level)
 {
@@ -112,10 +112,10 @@ static int bcm2711_gpio_set_level(gpio_t *gpio, enum gpio_level level)
         return -1;
     }
 
-    volatile uint32_t *paddr = (level == GPIO_LEVEL_HIGH) ? &(bank->gpset0) + (pin / 32)
+    volatile uint32_t *vaddr = (level == GPIO_LEVEL_HIGH) ? &(bank->gpset0) + (pin / 32)
                                : &(bank->gpclr0) + (pin / 32);
     uint8_t shift = (pin % 32);
-    *paddr = (1u << shift);
+    *vaddr = (1u << shift);
 
     return 0;
 }
@@ -143,9 +143,9 @@ static int bcm2711_gpio_read_level(gpio_t *gpio)
         return -1;
     }
 
-    volatile uint32_t *paddr = &(bank->gplev0) + (pin / 32);
+    volatile uint32_t *vaddr = &(bank->gplev0) + (pin / 32);
     uint8_t shift = pin % 32;
-    uint32_t value = *paddr;
+    uint32_t value = *vaddr;
 
     return (value & (1u << shift)) ? GPIO_LEVEL_HIGH : GPIO_LEVEL_LOW;
 }
@@ -181,14 +181,14 @@ int bcm2711_gpio_fsel(gpio_t *gpio, uint8_t mode)
         return -1;
     }
 
-    volatile uint32_t *paddr = &(bank->gpfsel0) + (pin / 10);
+    volatile uint32_t *vaddr = &(bank->gpfsel0) + (pin / 10);
     uint8_t  shift = (pin % 10) * 3;
     uint32_t mask  = BCM2711_GPIO_FSEL_MASK << shift;
     uint32_t value = mode << shift;
 
-    uint32_t v = *paddr;
+    uint32_t v = *vaddr;
     v = (v & ~mask) | (value & mask);
-    *paddr = v;
+    *vaddr = v;
 
     return 0;
 }
@@ -212,6 +212,18 @@ int bcm2711_gpio_sys_init(void *bank1, gpio_sys_t *gpio_sys)
 
 int gpio_sys_init(ps_io_ops_t *io_ops, gpio_sys_t *gpio_sys)
 {
+    if ((NULL == io_ops) 
+    || (NULL == gpio_sys)) {
+        return -EINVAL;
+    }
+
     MAP_IF_NULL(io_ops, BCM2711_GPIO, gpio_ctx.bank[0]);
+    if(NULL == gpio_ctx.bank[0]) {
+        ZF_LOGF("Failed to map BCM2711 GPIO bank 0 frame.");
+        return -ENOMEM;
+    }
+
+    ZF_LOGD("Mapped GPIO bank frame: paddr / vaddr -> 0x%lx / 0x%lx", (uintptr_t) BCM2711_GPIO_PADDR, (uintptr_t) (gpio_ctx.bank[0]));
+
     return bcm2711_gpio_init_common(gpio_sys);
 }
