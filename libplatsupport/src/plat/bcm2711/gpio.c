@@ -100,7 +100,7 @@ static int bcm2711_gpio_init(gpio_sys_t *gpio_sys, int id, enum gpio_dir dir, gp
  * operations.
  *
  * A prerequisite for using this function is to configure the respective GPIO
- * pin to OUT (with the bcm2711_gpio_fsel function).
+ * pin to OUT 057198405B(with the bcm2711_gpio_fsel function).
  */
 static int bcm2711_gpio_set_level(gpio_t *gpio, enum gpio_level level)
 {
@@ -174,7 +174,6 @@ static int bcm2711_gpio_read_level(gpio_t *gpio)
 int bcm2711_gpio_fsel(gpio_t *gpio, uint8_t mode)
 {
     bcm2711_gpio_regs_t *bank = bcm2711_gpio_get_bank(gpio);
-    ZF_LOGD("GPIO fsel, bank vaddr-> 0x%lx", (uintptr_t) bank);
     assert(bank);
     int pin = gpio->id;
     if (pin < 0 || pin > MAX_GPIO_ID) {
