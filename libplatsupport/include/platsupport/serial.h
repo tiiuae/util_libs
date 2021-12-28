@@ -15,7 +15,9 @@
 
 /* Auto-send CR(Carriage Return) after each "\n".
  * NOTE: This flag should be set by default. */
-#define SERIAL_AUTO_CR BIT(0)
+#define SERIAL_AUTO_CR         BIT(0)
+#define SERIAL_TX_NONBLOCKING  BIT(1)
+#define SERIAL_RX_NONBLOCKING  BIT(2)
 
 /*****************************/
 
