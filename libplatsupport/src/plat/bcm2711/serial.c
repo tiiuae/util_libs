@@ -1,6 +1,7 @@
 /*
  * Copyright 2017, Data61, CSIRO (ABN 41 687 119 230)
  * Copyright (C) 2021, Hensoldt Cyber GmbH
+ * Copyright 2022, Technology Innovation Institute
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -73,11 +74,13 @@ int uart_gpio_configure(enum chardev_id id, const ps_io_ops_t *o)
         tx_pin = 14;
         rx_pin = 15;
         alt_function = BCM2711_GPIO_FSEL_ALT0;
+        break;
     case 1:
         // UART 1 uses GPIO pins 14-15
         tx_pin = 14;
         rx_pin = 15;
         alt_function = BCM2711_GPIO_FSEL_ALT5;
+        break;
     case 2:
         // UART 2 uses GPIO pins 0-3
         tx_pin = 0;
