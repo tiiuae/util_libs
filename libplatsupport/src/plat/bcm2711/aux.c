@@ -93,7 +93,7 @@ static int bcm2711_aux_disable(aux_sys_t *aux_sys, aux_dev_id_t id)
 {
     assert(aux_sys);
     assert(aux_sys->priv);
-    
+
     int ret = 0;
     bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
 
@@ -131,7 +131,7 @@ int bcm2711_aux_init_common(aux_sys_t *aux_sys)
 
 int bcm2711_aux_sys_init(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 {
-    if ((NULL == io_ops) 
+    if ((NULL == io_ops)
     || (NULL == aux_sys)) {
         return -EINVAL;
     }
@@ -151,7 +151,7 @@ int bcm2711_aux_sys_init(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 
 int bcm2711_aux_sys_destroy(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 {
-    if ((NULL == io_ops) 
+    if ((NULL == io_ops)
     || (NULL == aux_sys)) {
         return -EINVAL;
     }

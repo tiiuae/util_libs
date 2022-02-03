@@ -164,7 +164,7 @@ static inline int mini_uart_disable(ps_chardevice_t *dev, aux_sys_t* aux, bool d
     int ret = 0;
 
     if (disable_aux) {
-        
+
         ret = aux->disable(aux, BCM2711_AUX_UART);
 
         if (!ret) {
@@ -360,7 +360,7 @@ static void mini_uart_handle_irq(ps_chardevice_t *dev)
         return;
     }
 
-    /* 
+    /*
      * TODO: how to handle TX interrupts?
      */
 
@@ -410,7 +410,7 @@ int mini_uart_init(const struct dev_defn *defn,
     dev->flags      = SERIAL_AUTO_CR;
 
     int ret = 0;
-    
+
     /* Initialize AUX subsystem handle */
     ret = bcm2711_aux_sys_init(ops, &aux);
     if (!ret) {

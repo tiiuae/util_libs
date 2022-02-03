@@ -214,7 +214,7 @@ int bcm2711_gpio_sys_init(void *bank1, gpio_sys_t *gpio_sys)
 
 int gpio_sys_init(ps_io_ops_t *io_ops, gpio_sys_t *gpio_sys)
 {
-    if (io_ops == NULL || 
+    if (io_ops == NULL ||
         gpio_sys == NULL) {
         return -EINVAL;
     }
