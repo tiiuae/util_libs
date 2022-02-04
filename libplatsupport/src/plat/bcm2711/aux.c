@@ -155,7 +155,7 @@ int bcm2711_aux_sys_destroy(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
     }
 
     if (aux_sys->priv != NULL) {
-        ZF_LOGD("Unmapping AUX registers frame: vaddr -> 0x%" PRIxPTR, 
+        ZF_LOGD("Unmapping AUX registers frame: vaddr -> 0x%" PRIxPTR,
             (uintptr_t)(aux_sys->priv));
         ps_io_unmap(&(io_ops->io_mapper), aux_sys->priv, AUX_SIZE);
     }

@@ -287,7 +287,7 @@ static int mini_uart_putchar_blocking(ps_chardevice_t *d, int c)
         if (slots_avail >= slots_required) {
 
             regs->mu_io = ch;
-            if (print_cr) { 
+            if (print_cr) {
                 regs->mu_io = '\r';
             }
 
@@ -322,7 +322,7 @@ static int mini_uart_putchar_nonblocking(ps_chardevice_t *d, int c)
         return EOF;
     } else {
         regs->mu_io = ch;
-        if (print_cr) { 
+        if (print_cr) {
             regs->mu_io = '\r';
         }
     }
