@@ -28,7 +28,8 @@ static struct bcm2711_aux {
     bcm2711_aux_regs_t *regs;
 } aux_ctx;
 
-static inline bcm2711_aux_regs_t* aux_get_regs(aux_sys_t* aux_sys){
+static inline bcm2711_aux_regs_t* aux_get_regs(aux_sys_t* aux_sys)
+{
     return (((struct bcm2711_aux *)aux_sys->priv)->regs);
 };
 
@@ -41,8 +42,7 @@ static int bcm2711_aux_get_irq_stat(aux_sys_t *aux_sys, aux_dev_id_t id)
     int ret = 0;
     bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
 
-    switch (id)
-    {
+    switch (id) {
         case BCM2711_AUX_UART:
             ret = (int) (regs->aux_irq & AUX_IRQ_MINIUART_IRQ);
             break;
@@ -69,8 +69,7 @@ static int bcm2711_aux_enable(aux_sys_t *aux_sys, aux_dev_id_t id)
     int ret = 0;
     bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
 
-    switch (id)
-    {
+    switch (id) {
         case BCM2711_AUX_UART:
             regs->aux_ena |= AUX_ENA_MINIUART_ENA;
             break;
@@ -97,8 +96,7 @@ static int bcm2711_aux_disable(aux_sys_t *aux_sys, aux_dev_id_t id)
     int ret = 0;
     bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
 
-    switch (id)
-    {
+    switch (id) {
         case BCM2711_AUX_UART:
             regs->aux_ena &= ~AUX_ENA_MINIUART_ENA;
             break;
@@ -121,7 +119,7 @@ int bcm2711_aux_init_common(aux_sys_t *aux_sys)
 {
     assert(aux_sys);
 
-    aux_sys->priv = (void*) &aux_ctx;
+    aux_sys->priv = (void *) &aux_ctx;
     aux_sys->get_irq_stat = &bcm2711_aux_get_irq_stat;
     aux_sys->enable = &bcm2711_aux_enable;
     aux_sys->disable = &bcm2711_aux_disable;
@@ -131,13 +129,13 @@ int bcm2711_aux_init_common(aux_sys_t *aux_sys)
 
 int bcm2711_aux_sys_init(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 {
-    if ((NULL == io_ops)
-    || (NULL == aux_sys)) {
+    if ((io_ops == NULL)
+        || (aux_sys == NULL)) {
         return -EINVAL;
     }
 
     MAP_IF_NULL(io_ops, AUX, aux_ctx.regs);
-    if(NULL == aux_ctx.regs) {
+    if (aux_ctx.regs == NULL) {
         ZF_LOGF("Failed to map BCM2711 AUX registers frame.");
         return -ENOMEM;
     }
@@ -151,13 +149,14 @@ int bcm2711_aux_sys_init(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 
 int bcm2711_aux_sys_destroy(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 {
-    if ((NULL == io_ops)
-    || (NULL == aux_sys)) {
+    if ((io_ops == NULL)
+        || (aux_sys == NULL)) {
         return -EINVAL;
     }
 
-    if (NULL != aux_sys->priv) {
-        ZF_LOGD("Unmapping AUX registers frame: vaddr -> 0x%" PRIxPTR, (uintptr_t) (aux_sys->priv));
+    if (aux_sys->priv != NULL) {
+        ZF_LOGD("Unmapping AUX registers frame: vaddr -> 0x%" PRIxPTR, 
+            (uintptr_t)(aux_sys->priv));
         ps_io_unmap(&(io_ops->io_mapper), aux_sys->priv, AUX_SIZE);
     }
 

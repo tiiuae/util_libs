@@ -114,7 +114,7 @@ mini_uart_regs_t;
 
 static aux_sys_t aux;
 
-static inline mini_uart_regs_t* mini_uart_get_priv(ps_chardevice_t *dev)
+static inline mini_uart_regs_t *mini_uart_get_priv(ps_chardevice_t *dev)
 {
     return ((mini_uart_regs_t *)dev->vaddr);
 }
@@ -125,7 +125,7 @@ static inline int mini_uart_flush_fifos(ps_chardevice_t *dev)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
 
     regs->mu_iir |= (MU_IIR_RXF_CLEAR | MU_IIR_TXF_CLEAR);
 
@@ -148,7 +148,7 @@ static inline int mini_uart_enable(ps_chardevice_t *dev, aux_sys_t* aux)
         return ret;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
     regs->mu_cntl |= (MU_CNTL_RXE | MU_CNTL_TXE);
 
     return 0;
@@ -173,7 +173,7 @@ static inline int mini_uart_disable(ps_chardevice_t *dev, aux_sys_t* aux, bool d
         }
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
     regs->mu_cntl &= ~(MU_CNTL_RXE | MU_CNTL_TXE);
 
     return 0;
@@ -185,7 +185,7 @@ static inline int mini_uart_enable_rx_irq(ps_chardevice_t *dev)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
     regs->mu_ier |= (MU_IER_RXD_IRQ | MU_IER_LSI_IRQ);
 
     return 0;
@@ -197,7 +197,7 @@ static inline int mini_uart_disable_rx_irq(ps_chardevice_t *dev)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
     regs->mu_ier &= ~(MU_IER_RXD_IRQ | MU_IER_LSI_IRQ);
 
     return 0;
@@ -209,7 +209,7 @@ static inline int mini_uart_enable_tx_irq(ps_chardevice_t *dev)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
     regs->mu_ier |= (MU_IER_TXE_IRQ | MU_IER_LSI_IRQ);
 
     return 0;
@@ -221,7 +221,7 @@ static inline int mini_uart_disable_tx_irq(ps_chardevice_t *dev)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
     regs->mu_ier &= ~(MU_IER_TXE_IRQ | MU_IER_LSI_IRQ);
 
     return 0;
@@ -238,7 +238,7 @@ static inline int mini_uart_get_irq_source(ps_chardevice_t *dev)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
     return (int)((regs->mu_iir & MU_IIR_SOURCE_MASK) >> MU_IIR_SOURCE_SHIFT);
 }
 
@@ -248,7 +248,7 @@ static inline int mini_uart_rxfifo_level(ps_chardevice_t *dev)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
     return (int)((regs->mu_stat & MU_STAT_RXF_LVL_MASK) >> MU_STAT_RXF_LVL_SHIFT);
 }
 
@@ -258,7 +258,7 @@ static inline int mini_uart_txfifo_level(ps_chardevice_t *dev)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
     return (int)((regs->mu_stat & MU_STAT_TXF_LVL_MASK) >> MU_STAT_TXF_LVL_SHIFT);
 }
 
@@ -270,7 +270,7 @@ static int mini_uart_putchar_blocking(ps_chardevice_t *d, int c)
     }
 
     const char ch = (const char)c;
-    mini_uart_regs_t* regs = mini_uart_get_priv(d);
+    mini_uart_regs_t *regs = mini_uart_get_priv(d);
 
     int slots_required = 1;
     bool print_cr = false;
@@ -281,14 +281,15 @@ static int mini_uart_putchar_blocking(ps_chardevice_t *d, int c)
         print_cr = true;
     }
 
-    do
-    {
+    do {
         int slots_avail = (MU_FIFO_SIZE - mini_uart_txfifo_level(d));
 
         if (slots_avail >= slots_required) {
 
             regs->mu_io = ch;
-            if (print_cr) { regs->mu_io = '\r'; }
+            if (print_cr) { 
+                regs->mu_io = '\r';
+            }
 
             complete = true;
         }
@@ -304,7 +305,7 @@ static int mini_uart_putchar_nonblocking(ps_chardevice_t *d, int c)
     }
 
     const char ch = (const char)c;
-    mini_uart_regs_t* regs = mini_uart_get_priv(d);
+    mini_uart_regs_t *regs = mini_uart_get_priv(d);
 
     int slots_required = 1;
     bool print_cr = false;
@@ -321,7 +322,9 @@ static int mini_uart_putchar_nonblocking(ps_chardevice_t *d, int c)
         return EOF;
     } else {
         regs->mu_io = ch;
-        if (print_cr) { regs->mu_io = '\r'; }
+        if (print_cr) { 
+            regs->mu_io = '\r';
+        }
     }
 
     return 0;
@@ -333,10 +336,11 @@ static int mini_uart_getchar_blocking(ps_chardevice_t *d)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(d);
+    mini_uart_regs_t *regs = mini_uart_get_priv(d);
 
-    while (!(regs->mu_stat & MU_STAT_RXF_DATAREADY))
-    return (int) (regs->mu_io & MU_IO_DATA_MASK);
+    while (!(regs->mu_stat & MU_STAT_RXF_DATAREADY)) {
+    }
+    return (int)(regs->mu_io & MU_IO_DATA_MASK);
 }
 
 static int mini_uart_getchar_nonblocking(ps_chardevice_t *d)
@@ -345,10 +349,10 @@ static int mini_uart_getchar_nonblocking(ps_chardevice_t *d)
         return -EINVAL;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(d);
+    mini_uart_regs_t *regs = mini_uart_get_priv(d);
 
     if (regs->mu_stat & MU_STAT_RXF_DATAREADY) {
-        return (int) (regs->mu_io & MU_IO_DATA_MASK);
+        return (int)(regs->mu_io & MU_IO_DATA_MASK);
     }
 
     return EOF;
@@ -418,7 +422,7 @@ int mini_uart_init(const struct dev_defn *defn,
         return ret;
     }
 
-    mini_uart_regs_t* regs = mini_uart_get_priv(dev);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
 
     /* Disable RX/TX and interrupts */
     ret = mini_uart_disable(dev, &aux, false);

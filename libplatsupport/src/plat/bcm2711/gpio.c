@@ -115,7 +115,7 @@ static int bcm2711_gpio_set_level(gpio_t *gpio, enum gpio_level level)
     }
 
     volatile uint32_t *addr = (level == GPIO_LEVEL_HIGH) ? &(bank->gpset0) + (pin / 32)
-                               : &(bank->gpclr0) + (pin / 32);
+                              : &(bank->gpclr0) + (pin / 32);
     uint8_t shift = (pin % 32);
     *addr = (1u << shift);
 
@@ -227,7 +227,7 @@ int gpio_sys_init(ps_io_ops_t *io_ops, gpio_sys_t *gpio_sys)
 
     ZF_LOGD("Mapped GPIO bank 0 registers frame: "
             "paddr / vaddr -> 0x% " PRIxPTR " / 0x% " PRIxPTR,
-            (uintptr_t) BCM2711_GPIO_PADDR, (uintptr_t) (gpio_ctx.bank[0]));
+            (uintptr_t) BCM2711_GPIO_PADDR, (uintptr_t)(gpio_ctx.bank[0]));
 
     return bcm2711_gpio_init_common(gpio_sys);
 }
