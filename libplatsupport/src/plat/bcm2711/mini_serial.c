@@ -132,7 +132,7 @@ static inline int mini_uart_flush_fifos(ps_chardevice_t *dev)
     return 0;
 }
 
-static inline int mini_uart_enable(ps_chardevice_t *dev, aux_sys_t* aux)
+static inline int mini_uart_enable(ps_chardevice_t *dev, aux_sys_t *aux)
 {
     if (dev == NULL ||
         aux == NULL) {
@@ -154,7 +154,7 @@ static inline int mini_uart_enable(ps_chardevice_t *dev, aux_sys_t* aux)
     return 0;
 }
 
-static inline int mini_uart_disable(ps_chardevice_t *dev, aux_sys_t* aux, bool disable_aux)
+static inline int mini_uart_disable(ps_chardevice_t *dev, aux_sys_t *aux, bool disable_aux)
 {
     if (dev == NULL ||
         aux == NULL) {

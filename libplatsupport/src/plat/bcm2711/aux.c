@@ -28,7 +28,7 @@ static struct bcm2711_aux {
     bcm2711_aux_regs_t *regs;
 } aux_ctx;
 
-static inline bcm2711_aux_regs_t* aux_get_regs(aux_sys_t* aux_sys)
+static inline bcm2711_aux_regs_t *aux_get_regs(aux_sys_t *aux_sys)
 {
     return (((struct bcm2711_aux *)aux_sys->priv)->regs);
 };
@@ -40,22 +40,22 @@ static int bcm2711_aux_get_irq_stat(aux_sys_t *aux_sys, aux_dev_id_t id)
     assert(aux_sys->priv);
 
     int ret = 0;
-    bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
+    bcm2711_aux_regs_t *regs = aux_get_regs(aux_sys);
 
     switch (id) {
-        case BCM2711_AUX_UART:
-            ret = (int) (regs->aux_irq & AUX_IRQ_MINIUART_IRQ);
-            break;
-        case BCM2711_AUX_SPI1:
-            ret = (int) (regs->aux_irq & AUX_IRQ_SPI1_IRQ);
-            break;
-        case BCM2711_AUX_SPI2:
-            ret = (int) (regs->aux_irq & AUX_IRQ_SPI2_IRQ);
-            break;
-        default:
-            ZF_LOGE("AUX device ID is not in valid range!");
-            ret = -EINVAL;
-            break;
+    case BCM2711_AUX_UART:
+        ret = (int)(regs->aux_irq & AUX_IRQ_MINIUART_IRQ);
+        break;
+    case BCM2711_AUX_SPI1:
+        ret = (int)(regs->aux_irq & AUX_IRQ_SPI1_IRQ);
+        break;
+    case BCM2711_AUX_SPI2:
+        ret = (int)(regs->aux_irq & AUX_IRQ_SPI2_IRQ);
+        break;
+    default:
+        ZF_LOGE("AUX device ID is not in valid range!");
+        ret = -EINVAL;
+        break;
     }
 
     return ret;
@@ -67,22 +67,22 @@ static int bcm2711_aux_enable(aux_sys_t *aux_sys, aux_dev_id_t id)
     assert(aux_sys->priv);
 
     int ret = 0;
-    bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
+    bcm2711_aux_regs_t *regs = aux_get_regs(aux_sys);
 
     switch (id) {
-        case BCM2711_AUX_UART:
-            regs->aux_ena |= AUX_ENA_MINIUART_ENA;
-            break;
-        case BCM2711_AUX_SPI1:
-            regs->aux_ena |= AUX_ENA_SPI1_ENA;
-            break;
-        case BCM2711_AUX_SPI2:
-            regs->aux_ena |= AUX_ENA_SPI2_ENA;
-            break;
-        default:
-            ZF_LOGE("AUX device ID is not in valid range!");
-            ret = -EINVAL;
-            break;
+    case BCM2711_AUX_UART:
+        regs->aux_ena |= AUX_ENA_MINIUART_ENA;
+        break;
+    case BCM2711_AUX_SPI1:
+        regs->aux_ena |= AUX_ENA_SPI1_ENA;
+        break;
+    case BCM2711_AUX_SPI2:
+        regs->aux_ena |= AUX_ENA_SPI2_ENA;
+        break;
+    default:
+        ZF_LOGE("AUX device ID is not in valid range!");
+        ret = -EINVAL;
+        break;
     }
 
     return ret;
@@ -94,22 +94,22 @@ static int bcm2711_aux_disable(aux_sys_t *aux_sys, aux_dev_id_t id)
     assert(aux_sys->priv);
 
     int ret = 0;
-    bcm2711_aux_regs_t* regs = aux_get_regs(aux_sys);
+    bcm2711_aux_regs_t *regs = aux_get_regs(aux_sys);
 
     switch (id) {
-        case BCM2711_AUX_UART:
-            regs->aux_ena &= ~AUX_ENA_MINIUART_ENA;
-            break;
-        case BCM2711_AUX_SPI1:
-            regs->aux_ena &= ~AUX_ENA_SPI1_ENA;
-            break;
-        case BCM2711_AUX_SPI2:
-            regs->aux_ena &= ~AUX_ENA_SPI2_ENA;
-            break;
-        default:
-            ZF_LOGE("AUX device ID is not in valid range!");
-            ret = -EINVAL;
-            break;
+    case BCM2711_AUX_UART:
+        regs->aux_ena &= ~AUX_ENA_MINIUART_ENA;
+        break;
+    case BCM2711_AUX_SPI1:
+        regs->aux_ena &= ~AUX_ENA_SPI1_ENA;
+        break;
+    case BCM2711_AUX_SPI2:
+        regs->aux_ena &= ~AUX_ENA_SPI2_ENA;
+        break;
+    default:
+        ZF_LOGE("AUX device ID is not in valid range!");
+        ret = -EINVAL;
+        break;
     }
 
     return ret;
@@ -142,7 +142,7 @@ int bcm2711_aux_sys_init(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 
     ZF_LOGD("Mapped AUX registers frame: "
             "paddr / vaddr -> 0x% " PRIxPTR " / 0x% " PRIxPTR,
-            (uintptr_t) AUX_PADDR, (uintptr_t) (aux_ctx.regs));
+            (uintptr_t) AUX_PADDR, (uintptr_t)(aux_ctx.regs));
 
     return bcm2711_aux_init_common(aux_sys);
 }
@@ -156,7 +156,7 @@ int bcm2711_aux_sys_destroy(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 
     if (aux_sys->priv != NULL) {
         ZF_LOGD("Unmapping AUX registers frame: vaddr -> 0x%" PRIxPTR,
-            (uintptr_t)(aux_sys->priv));
+                (uintptr_t)(aux_sys->priv));
         ps_io_unmap(&(io_ops->io_mapper), aux_sys->priv, AUX_SIZE);
     }
 
