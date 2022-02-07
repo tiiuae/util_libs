@@ -61,6 +61,33 @@ static int bcm2711_aux_get_irq_stat(aux_sys_t *aux_sys, aux_dev_id_t id)
     return ret;
 }
 
+static int bcm2711_aux_status(aux_sys_t *aux_sys, aux_dev_id_t id)
+{
+    assert(aux_sys);
+    assert(aux_sys->priv);
+
+    int ret = 0;
+    bcm2711_aux_regs_t *regs = aux_get_regs(aux_sys);
+
+    switch (id) {
+    case BCM2711_AUX_UART:
+        ret = regs->aux_ena | AUX_ENA_MINIUART_ENA;
+        break;
+    case BCM2711_AUX_SPI1:
+        ret = regs->aux_ena | AUX_ENA_SPI1_ENA;
+        break;
+    case BCM2711_AUX_SPI2:
+        ret = regs->aux_ena | AUX_ENA_SPI2_ENA;
+        break;
+    default:
+        ZF_LOGE("AUX device ID is not in valid range!");
+        ret = -EINVAL;
+        break;
+    }
+
+    return ret;
+}
+
 static int bcm2711_aux_enable(aux_sys_t *aux_sys, aux_dev_id_t id)
 {
     assert(aux_sys);
@@ -121,6 +148,7 @@ int bcm2711_aux_init_common(aux_sys_t *aux_sys)
 
     aux_sys->priv = (void *) &aux_ctx;
     aux_sys->get_irq_stat = &bcm2711_aux_get_irq_stat;
+    aux_sys->status = &bcm2711_aux_status;
     aux_sys->enable = &bcm2711_aux_enable;
     aux_sys->disable = &bcm2711_aux_disable;
 

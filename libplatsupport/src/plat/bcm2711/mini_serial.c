@@ -141,10 +141,18 @@ static inline int mini_uart_enable(ps_chardevice_t *dev, aux_sys_t *aux)
 
     int ret = 0;
 
-    ret = aux->enable(aux, BCM2711_AUX_UART);
+    /* Enable in AUX block only if necessary */
+    ret = aux->status(aux, BCM2711_AUX_UART);
 
-    if (ret != 0) {
-        ZF_LOGE("Failed to enable mini-UART in AUX subsystem! %i", ret);
+    if (ret == 0) {
+        ret = aux->enable(aux, BCM2711_AUX_UART);
+
+        if (ret != 0) {
+            ZF_LOGE("Failed to enable mini-UART in AUX subsystem! %i", ret);
+            return ret;
+        }
+    } else if (ret < 0) {
+        ZF_LOGE("Failed to query mini-UART status in AUX subsystem! %i", ret);
         return ret;
     }
 
@@ -339,8 +347,10 @@ static int mini_uart_getchar_blocking(ps_chardevice_t *d)
     mini_uart_regs_t *regs = mini_uart_get_priv(d);
 
     while (!(regs->mu_stat & MU_STAT_RXF_DATAREADY)) {
-        return (int)(regs->mu_io & MU_IO_DATA_MASK);
+        __asm__ volatile("nop");
     }
+
+    return (int)(regs->mu_io & MU_IO_DATA_MASK);
 }
 
 static int mini_uart_getchar_nonblocking(ps_chardevice_t *d)
@@ -433,7 +443,7 @@ int mini_uart_init(const struct dev_defn *defn,
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
 
-    /* Disable RX/TX and interrupts */
+    /* Disable RX/TX */
     ret = mini_uart_disable(dev, &aux, false);
     if (ret != 0) {
         ZF_LOGE("Failed to disable mini-UART! %i", ret);
@@ -451,6 +461,7 @@ int mini_uart_init(const struct dev_defn *defn,
         return ret;
     }
 
+    /* Enable again */
     ret = mini_uart_enable(dev, &aux);
     if (ret != 0) {
         ZF_LOGE("Failed to enable mini-UART! %i", ret);

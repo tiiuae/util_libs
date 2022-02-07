@@ -53,6 +53,14 @@ struct aux_sys {
     int (*get_irq_stat)(aux_sys_t *aux_sys, aux_dev_id_t id);
 
     /**
+     * Query AUX device status.
+     * @param[in]   aux_sys    Initialized AUX driver instance.
+     * @param[in]   id         ID of the AUX device.
+     * @return 1 if device is enabled, 0 if not. <0 on error.
+     */
+    int (*status)(aux_sys_t *aux_sys, aux_dev_id_t id);
+
+    /**
      * Enable AUX device.
      * @param[in]   aux_sys    Initialized AUX driver instance.
      * @param[in]   id         ID of the AUX device.
