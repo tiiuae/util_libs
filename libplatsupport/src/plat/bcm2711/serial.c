@@ -164,7 +164,11 @@ int uart_init(const struct dev_defn *defn,
         break;
     }
 
-    uart_gpio_configure(defn->id, ops);
+    int ret = uart_gpio_configure(defn->id, ops);
+    if (0 != ret) {
+        ZF_LOGF("UART GPIO configuration failed. %i", ret);
+        return -1;
+    }
 
     uart_funcs.uart_init(defn, ops, dev);
 
