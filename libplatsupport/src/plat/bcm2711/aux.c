@@ -127,15 +127,29 @@ int bcm2711_aux_init_common(aux_sys_t *aux_sys)
     return 0;
 }
 
+int bcm2711_aux_sys_init_ext(void *page, aux_sys_t *aux_sys)
+{
+    if (page != NULL) {
+        aux_ctx.regs = page;
+
+        ZF_LOGD("Using externally mapped AUX registers frame: "
+                "vaddr -> 0x%" PRIxPTR, (uintptr_t)(aux_ctx.regs));
+
+        return bcm2711_aux_init_common(aux_sys);
+    }
+
+    return -EINVAL;
+}
+
 int bcm2711_aux_sys_init(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 {
-    if ((NULL == io_ops)
-        || (NULL == aux_sys)) {
+    if ((io_ops == NULL)
+        || (aux_sys == NULL)) {
         return -EINVAL;
     }
 
     MAP_IF_NULL(io_ops, AUX, aux_ctx.regs);
-    if (NULL == aux_ctx.regs) {
+    if (aux_ctx.regs == NULL) {
         ZF_LOGF("Failed to map BCM2711 AUX registers frame.");
         return -ENOMEM;
     }
@@ -149,12 +163,12 @@ int bcm2711_aux_sys_init(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 
 int bcm2711_aux_sys_destroy(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys)
 {
-    if ((NULL == io_ops)
-        || (NULL == aux_sys)) {
+    if ((io_ops == NULL)
+        || (aux_sys == NULL)) {
         return -EINVAL;
     }
 
-    if (NULL != aux_sys->priv) {
+    if (aux_sys->priv != NULL) {
         ZF_LOGD("Unmapping AUX registers frame: vaddr -> 0x%" PRIxPTR, (uintptr_t)(aux_sys->priv));
         ps_io_unmap(&(io_ops->io_mapper), aux_sys->priv, AUX_SIZE);
     }

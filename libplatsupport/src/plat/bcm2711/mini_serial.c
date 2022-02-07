@@ -415,8 +415,17 @@ int mini_uart_init(const struct dev_defn *defn,
 
     int ret = 0;
 
-    /* Initialize AUX subsystem handle */
-    ret = bcm2711_aux_sys_init(ops, &aux);
+    /* Initialize AUX subsystem handle
+     *
+     * NOTE: current system limits the smallest shareable
+     * (untyped) MMIO region to 4K page, which is too large
+     * to separate between the AUX MMIO range and mini-UART
+     * range (0x40 bytes between the registers).
+     *
+     * Therefore we must share our MMIO mapping with the AUX
+     * subsystem.
+     */
+    ret = bcm2711_aux_sys_init_ext(vaddr, &aux);
     if (ret != 0) {
         ZF_LOGE("Failed to initialize AUX subsystem! %i", ret);
         return ret;

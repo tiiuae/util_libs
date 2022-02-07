@@ -74,17 +74,25 @@ struct aux_sys {
 };
 
 /**
+ * Initialise the BCM2711 AUX system handler instance with externally mapped MMIO page.
+ * @param[in]  page      Mapping for AUX registers page.
+ * @param[out] aux_sys   Handle to AUX system instance to populate.
+ * @return               0 on success. Non-zero on error.
+ */
+int bcm2711_aux_sys_init_ext(void *page, aux_sys_t *aux_sys);
+
+/**
  * Initialise the BCM2711 AUX system handler instance.
- * @param[in]  io_ops    IO operations for device initialisation.
- * @param[out] aux_sys   A handle to a AUX subsystem to populate.
+ * @param[in]  io_ops    I/O operations for device initialisation.
+ * @param[out] aux_sys   Handle to AUX system instance to populate.
  * @return               0 on success. Non-zero on error.
  */
 int bcm2711_aux_sys_init(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys);
 
 /**
  * De-initialise the BCM2711 AUX system handler instance.
- * @param[in]  io_ops    IO operations for device initialisation.
- * @param[out] aux_sys   A handle to a AUX subsystem to populate.
+ * @param[in]  io_ops    I/O operations for device initialisation.
+ * @param[out] aux_sys   Handle to AUX system instance to populate.
  * @return               0 on success. Non-zero on error.
  */
 int bcm2711_aux_sys_destroy(const ps_io_ops_t *io_ops, aux_sys_t *aux_sys);
