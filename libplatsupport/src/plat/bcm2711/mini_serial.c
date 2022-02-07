@@ -126,7 +126,6 @@ static inline int mini_uart_flush_fifos(ps_chardevice_t *dev)
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-
     regs->mu_iir |= (MU_IIR_RXF_CLEAR | MU_IIR_TXF_CLEAR);
 
     return 0;
@@ -169,6 +168,9 @@ static inline int mini_uart_disable(ps_chardevice_t *dev, aux_sys_t *aux, bool d
         return -EINVAL;
     }
 
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    regs->mu_cntl &= ~(MU_CNTL_RXE | MU_CNTL_TXE);
+
     int ret = 0;
 
     if (disable_aux) {
@@ -180,9 +182,6 @@ static inline int mini_uart_disable(ps_chardevice_t *dev, aux_sys_t *aux, bool d
             return ret;
         }
     }
-
-    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    regs->mu_cntl &= ~(MU_CNTL_RXE | MU_CNTL_TXE);
 
     return 0;
 }
@@ -375,15 +374,16 @@ static void mini_uart_handle_irq(ps_chardevice_t *dev)
     }
 
     /*
-     * TODO: how to handle TX interrupts?
+     * TODO: how to handle RX/TX interrupts?
      */
 
     const int source = mini_uart_get_irq_source(dev);
     ZF_LOGD("mini-UART interrupt source: %i", source);
 
-    if (MU_RXD_INTERRUPT == source) {
-        mini_uart_enable_rx_irq(dev);
-    } else if (MU_TXE_INTERRUPT == source) {
+    if (source == MU_RXD_INTERRUPT) {
+        //mini_uart_enable_rx_irq(dev);
+        ZF_LOGD("Unhandled RXE interrupt");
+    } else if (source == MU_TXE_INTERRUPT) {
         ZF_LOGD("Unhandled TXE interrupt");
     }
 }
@@ -454,17 +454,17 @@ int mini_uart_init(const struct dev_defn *defn,
     regs->mu_lcr |= MU_LCR_DATASIZE;
     regs->mu_lcr &= ~MU_LCR_DLAB;
 
-    /* Flush FIFO buffers and enable mini-UART */
-    ret = mini_uart_flush_fifos(dev);
-    if (ret != 0) {
-        ZF_LOGE("Failed to flush mini-UART FIFOs! %i", ret);
-        return ret;
-    }
-
     /* Enable again */
     ret = mini_uart_enable(dev, &aux);
     if (ret != 0) {
         ZF_LOGE("Failed to enable mini-UART! %i", ret);
+        return ret;
+    }
+
+    /* Flush FIFO buffers */
+    ret = mini_uart_flush_fifos(dev);
+    if (ret != 0) {
+        ZF_LOGE("Failed to flush mini-UART FIFOs! %i", ret);
         return ret;
     }
 
