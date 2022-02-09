@@ -1,6 +1,7 @@
 /*
  * Copyright 2017, Data61, CSIRO (ABN 41 687 119 230)
  * Copyright (C) 2021, Hensoldt Cyber GmbH
+ * Copyright 2022, Technology Innovation Institute
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -73,11 +74,13 @@ int uart_gpio_configure(enum chardev_id id, const ps_io_ops_t *o)
         tx_pin = 14;
         rx_pin = 15;
         alt_function = BCM2711_GPIO_FSEL_ALT0;
+        break;
     case 1:
         // UART 1 uses GPIO pins 14-15
         tx_pin = 14;
         rx_pin = 15;
         alt_function = BCM2711_GPIO_FSEL_ALT5;
+        break;
     case 2:
         // UART 2 uses GPIO pins 0-3
         tx_pin = 0;
@@ -105,7 +108,6 @@ int uart_gpio_configure(enum chardev_id id, const ps_io_ops_t *o)
     default:
         ZF_LOGD("No pin configuration required!");
         return 0;
-        break;
     }
 
     if (tx_pin < 0 || rx_pin < 0) {
@@ -120,7 +122,7 @@ int uart_gpio_configure(enum chardev_id id, const ps_io_ops_t *o)
 
     // GPIO initialization
     int ret = gpio_sys_init((ps_io_ops_t *)o, &gpio_sys);
-    if (ret) {
+    if (ret != 0) {
         ZF_LOGE("gpio_sys_init() failed: ret = %i", ret);
         return -1;
     }
@@ -158,10 +160,13 @@ int uart_init(const struct dev_defn *defn,
     default:
         ZF_LOGE("UART with id %d does not exist!", defn->id);
         return -1;
-        break;
     }
 
-    uart_gpio_configure(defn->id, ops);
+    int ret = uart_gpio_configure(defn->id, ops);
+    if (ret != 0) {
+        ZF_LOGF("UART GPIO configuration failed. %i", ret);
+        return -1;
+    }
 
     uart_funcs.uart_init(defn, ops, dev);
 
