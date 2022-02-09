@@ -34,9 +34,11 @@ config_choice(
     "ega;LibPlatSupportX86ConsoleDeviceEGA;LIB_PLAT_SUPPORT_SERIAL_TEXT_EGA;KernelPlatPC99"
 )
 
+set(_link_arm_vm_Config_lib "")
 set(LibPlatSupportMach "")
 if(KernelPlatformRpi3 OR KernelPlatformRpi4)
     set(LibPlatSupportMach "bcm283x")
+    set(_link_arm_vm_Config_lib "arm_vm_Config")
 elseif(NOT ${KernelArmMach} STREQUAL "")
     # falling back to kernel settings is done to keep legacy compatibility
     set(LibPlatSupportMach "${KernelArmMach}")
@@ -164,6 +166,7 @@ target_link_libraries(
     utils
     fdt
     sel4_autoconf
+    ${_link_arm_vm_Config_lib}
     platsupport_Config
     ${irqchip_modules}
 )

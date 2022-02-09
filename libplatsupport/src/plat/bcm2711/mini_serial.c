@@ -11,6 +11,7 @@
 #include <platsupport/serial.h>
 #include <platsupport/plat/aux.h>
 #include <platsupport/plat/serial.h>
+#include <arm_vm/gen_config.h>
 #include "serial.h"
 #include "mini_serial.h"
 
@@ -41,15 +42,26 @@ enum mu_cntl_flow_level {
     FIFO_4B_LEFT = 3   /* RTS de-asserted when RX FIFO has 4 bytes left. */
 };
 
+/* Helpers */
+#define MU_SET_BITS_MASK(word, bitmask)   (word |= bitmask)
+#define MU_CLEAR_BITS_MASK(word, bitmask) (word &= ~bitmask)
+#define MU_GET_BITS_MASK(word, bitmask)   (word & bitmask)
+
 #define MU_FIFO_SIZE          (8) /* 8-byte FIFOs for RX & TX. */
 
 #define MU_IO_DATA_MASK       MASK(8) /* IO register data bits mask. (Bits 7:0). */
 
-/* TRM has errors regarding IER register, see errata comment above */
+/* BCM2711 TRM has errors regarding IER register.
+ * In order to receive interrupts, bits 3 and 2 must
+ * be written to 1, this is mentioned in BCM2835 peripherals
+ * document. Because BCM2711 mini-UART is essentially the same
+ * as in earlier Raspberries, the same applies. */
 #define MU_IER_RXD_IRQ        BIT(0) /* Interrupt if RX FIFO holds at least 1 byte. */
 #define MU_IER_TXE_IRQ        BIT(1) /* Interrupt if TX FIFO is empty. */
 #define MU_IER_LSI_IRQ        BIT(2) /* RX Line Status Interrupt on overrun/parity/framing errors etc. */
 #define MU_IER_MSI_IRQ        BIT(3) /* Modem Status Interrupt on changing states to either: To Send(CTS), Data Set Ready(DSR). */
+#define MU_IER_RXD_ENA_MASK   (BIT(3) | BIT(2) | BIT(0))
+#define MU_IER_TXE_ENA_MASK   (BIT(3) | BIT(2) | BIT(1))
 
 #define MU_IIR_PENDING        BIT(0) /* This bit is clear if there is an interrupt pending. */
 #define MU_IIR_SOURCE_MASK    (MASK(3) & ~BIT(0)) /* Interrupt source bits mask. (Bits 2:1). */
@@ -57,7 +69,8 @@ enum mu_cntl_flow_level {
 #define MU_IIR_RXF_CLEAR      BIT(1) /* RX FIFO clear. */
 #define MU_IIR_TXF_CLEAR      BIT(2) /* TX FIFO clear. */
 
-#define MU_LCR_DATASIZE       BIT(0) /* 0 -> 7-bit mode, 1 -> 8-bit mode. */
+#define MU_LCR_DATASZ_7B      (0x0)  /* Bits 1:0 == 00 -> 7-bit mode. */
+#define MU_LCR_DATASZ_8B      (0x3)  /* Bits 1:0 == 11 -> 8-bit mode. */
 #define MU_LCR_BREAK          BIT(6) /* This bit is set if TX line is pulled low for at least 12 bit times. (Break condition).*/
 #define MU_LCR_DLAB           BIT(7) /* DLAB access bit. */
 
@@ -126,7 +139,11 @@ static inline int mini_uart_flush_fifos(ps_chardevice_t *dev)
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    regs->mu_iir |= (MU_IIR_RXF_CLEAR | MU_IIR_TXF_CLEAR);
+    uint32_t iir = regs->mu_iir;
+
+    MU_SET_BITS_MASK(iir, (MU_IIR_RXF_CLEAR | MU_IIR_TXF_CLEAR));
+
+    regs->mu_iir = iir;
 
     return 0;
 }
@@ -140,23 +157,26 @@ static inline int mini_uart_enable(ps_chardevice_t *dev, aux_sys_t *aux)
 
     int ret = 0;
 
-    /* Enable in AUX block only if necessary */
+    /* Enable in AUX block if necessary */
     ret = aux->status(aux, BCM2711_AUX_UART);
 
-    if (ret == 0) {
+    if (ret != 1) {
+
+        // Not enabled
         ret = aux->enable(aux, BCM2711_AUX_UART);
 
         if (ret != 0) {
             ZF_LOGE("Failed to enable mini-UART in AUX subsystem! %i", ret);
             return ret;
         }
-    } else if (ret < 0) {
-        ZF_LOGE("Failed to query mini-UART status in AUX subsystem! %i", ret);
-        return ret;
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    regs->mu_cntl |= (MU_CNTL_RXE | MU_CNTL_TXE);
+    uint32_t cntl = regs->mu_cntl;
+
+    MU_SET_BITS_MASK(cntl, (MU_CNTL_RXE | MU_CNTL_TXE));
+
+    regs->mu_cntl = cntl;
 
     return 0;
 }
@@ -169,10 +189,20 @@ static inline int mini_uart_disable(ps_chardevice_t *dev, aux_sys_t *aux, bool d
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    regs->mu_cntl &= ~(MU_CNTL_RXE | MU_CNTL_TXE);
+    uint32_t cntl = regs->mu_cntl;
+
+    MU_CLEAR_BITS_MASK(cntl, (MU_CNTL_RXE | MU_CNTL_TXE));
+
+    regs->mu_cntl = cntl;
 
     int ret = 0;
 
+    /* Warning!
+     * Disabling mini-UART in AUX block
+     * disables ALL register access! Nothing
+     * can read or write to the peripheral
+     * registers if it is disabled in AUX block.
+     */
     if (disable_aux) {
 
         ret = aux->disable(aux, BCM2711_AUX_UART);
@@ -193,7 +223,11 @@ static inline int mini_uart_enable_rx_irq(ps_chardevice_t *dev)
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    regs->mu_ier |= (MU_IER_RXD_IRQ | MU_IER_LSI_IRQ);
+    uint32_t ier = regs->mu_ier;
+
+    MU_SET_BITS_MASK(ier, MU_IER_RXD_ENA_MASK);
+
+    regs->mu_ier = ier;
 
     return 0;
 }
@@ -205,7 +239,20 @@ static inline int mini_uart_disable_rx_irq(ps_chardevice_t *dev)
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    regs->mu_ier &= ~(MU_IER_RXD_IRQ | MU_IER_LSI_IRQ);
+    uint32_t ier = regs->mu_ier;
+
+    /* If TXE is set, clear only RXD bit.
+     * Clearing also bits 3:2 would disturb
+     * receiving TXE interrupts.
+     *
+     * Otherwise, disable also bits 3:2 */
+    if (ier & MU_IER_TXE_IRQ) {
+        MU_CLEAR_BITS_MASK(ier, MU_IER_RXD_IRQ);
+    } else {
+        MU_CLEAR_BITS_MASK(ier, MU_IER_RXD_ENA_MASK);
+    }
+
+    regs->mu_ier = ier;
 
     return 0;
 }
@@ -217,7 +264,11 @@ static inline int mini_uart_enable_tx_irq(ps_chardevice_t *dev)
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    regs->mu_ier |= (MU_IER_TXE_IRQ | MU_IER_LSI_IRQ);
+    uint32_t ier = regs->mu_ier;
+
+    MU_SET_BITS_MASK(ier, MU_IER_TXE_ENA_MASK);
+
+    regs->mu_ier = ier;
 
     return 0;
 }
@@ -229,14 +280,38 @@ static inline int mini_uart_disable_tx_irq(ps_chardevice_t *dev)
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    regs->mu_ier &= ~(MU_IER_TXE_IRQ | MU_IER_LSI_IRQ);
+    uint32_t ier = regs->mu_ier;
+
+    /* If RXD is set, clear only TXE bit.
+     * Clearing also bits 3:2 would disturb
+     * receiving RXD interrupts.
+     *
+     * Otherwise, disable also bits 3:2 */
+    if (ier & MU_IER_RXD_IRQ) {
+        MU_CLEAR_BITS_MASK(ier, MU_IER_TXE_IRQ);
+    } else {
+        MU_CLEAR_BITS_MASK(ier, MU_IER_TXE_ENA_MASK);
+    }
+
+    regs->mu_ier = ier;
 
     return 0;
 }
 
 static inline int mini_uart_disable_interrupts(ps_chardevice_t *dev)
 {
-    return (mini_uart_disable_rx_irq(dev) | mini_uart_disable_tx_irq(dev));
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t ier = regs->mu_ier;
+
+    MU_CLEAR_BITS_MASK(ier, (MU_IER_TXE_ENA_MASK | MU_IER_RXD_IRQ));
+
+    regs->mu_ier = ier;
+
+    return 0;
 }
 
 static inline int mini_uart_get_irq_source(ps_chardevice_t *dev)
@@ -246,7 +321,9 @@ static inline int mini_uart_get_irq_source(ps_chardevice_t *dev)
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    return (int)((regs->mu_iir & MU_IIR_SOURCE_MASK) >> MU_IIR_SOURCE_SHIFT);
+    uint32_t iir = regs->mu_iir;
+
+    return (int)(MU_GET_BITS_MASK(iir, MU_IIR_SOURCE_MASK) >> MU_IIR_SOURCE_SHIFT);
 }
 
 static inline int mini_uart_rxfifo_level(ps_chardevice_t *dev)
@@ -256,7 +333,9 @@ static inline int mini_uart_rxfifo_level(ps_chardevice_t *dev)
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    return (int)((regs->mu_stat & MU_STAT_RXF_LVL_MASK) >> MU_STAT_RXF_LVL_SHIFT);
+    uint32_t stat = regs->mu_stat;
+
+    return (int)(MU_GET_BITS_MASK(stat, MU_STAT_RXF_LVL_MASK) >> MU_STAT_RXF_LVL_SHIFT);
 }
 
 static inline int mini_uart_txfifo_level(ps_chardevice_t *dev)
@@ -266,7 +345,9 @@ static inline int mini_uart_txfifo_level(ps_chardevice_t *dev)
     }
 
     mini_uart_regs_t *regs = mini_uart_get_priv(dev);
-    return (int)((regs->mu_stat & MU_STAT_TXF_LVL_MASK) >> MU_STAT_TXF_LVL_SHIFT);
+    uint32_t stat = regs->mu_stat;
+
+    return (int)(MU_GET_BITS_MASK(stat, MU_STAT_TXF_LVL_MASK) >> MU_STAT_TXF_LVL_SHIFT);
 }
 
 
@@ -276,14 +357,13 @@ static int mini_uart_putchar_blocking(ps_chardevice_t *d, int c)
         return -EINVAL;
     }
 
-    const char ch = (const char)c;
     mini_uart_regs_t *regs = mini_uart_get_priv(d);
 
     int slots_required = 1;
     bool print_cr = false;
     bool complete = false;
 
-    if ((d->flags & SERIAL_AUTO_CR) && (ch == '\n')) {
+    if ((d->flags & SERIAL_AUTO_CR) && (c == '\n')) {
         slots_required = 2;
         print_cr = true;
     }
@@ -293,9 +373,10 @@ static int mini_uart_putchar_blocking(ps_chardevice_t *d, int c)
 
         if (slots_avail >= slots_required) {
 
-            regs->mu_io = ch;
+            regs->mu_io = (uint32_t)c;
+
             if (print_cr) {
-                regs->mu_io = '\r';
+                regs->mu_io = (uint32_t)'\r';
             }
 
             complete = true;
@@ -311,14 +392,12 @@ static int mini_uart_putchar_nonblocking(ps_chardevice_t *d, int c)
         return -EINVAL;
     }
 
-    const char ch = (const char)c;
     mini_uart_regs_t *regs = mini_uart_get_priv(d);
 
     int slots_required = 1;
     bool print_cr = false;
-    bool complete = false;
 
-    if ((d->flags & SERIAL_AUTO_CR) && (ch == '\n')) {
+    if ((d->flags & SERIAL_AUTO_CR) && (c == '\n')) {
         slots_required = 2;
         print_cr = true;
     }
@@ -328,9 +407,11 @@ static int mini_uart_putchar_nonblocking(ps_chardevice_t *d, int c)
     if (slots_avail < slots_required) {
         return EOF;
     } else {
-        regs->mu_io = ch;
+
+        regs->mu_io = (uint32_t)c;
+
         if (print_cr) {
-            regs->mu_io = '\r';
+            regs->mu_io = (uint32_t)'\r';
         }
     }
 
@@ -345,11 +426,17 @@ static int mini_uart_getchar_blocking(ps_chardevice_t *d)
 
     mini_uart_regs_t *regs = mini_uart_get_priv(d);
 
-    while (!(regs->mu_stat & MU_STAT_RXF_DATAREADY)) {
-        __asm__ volatile("nop");
+    /* Busy-wait until symbol arrives */
+    while (1) {
+
+        if (regs->mu_stat & MU_STAT_RXF_DATAREADY) {
+
+            /* RX FIFO has at least 1 symbol */
+            return (int)(regs->mu_io & MU_IO_DATA_MASK);
+        }
     }
 
-    return (int)(regs->mu_io & MU_IO_DATA_MASK);
+    return EOF;
 }
 
 static int mini_uart_getchar_nonblocking(ps_chardevice_t *d)
@@ -361,6 +448,8 @@ static int mini_uart_getchar_nonblocking(ps_chardevice_t *d)
     mini_uart_regs_t *regs = mini_uart_get_priv(d);
 
     if (regs->mu_stat & MU_STAT_RXF_DATAREADY) {
+
+        /* RX FIFO has at least 1 symbol */
         return (int)(regs->mu_io & MU_IO_DATA_MASK);
     }
 
@@ -373,19 +462,49 @@ static void mini_uart_handle_irq(ps_chardevice_t *dev)
         return;
     }
 
-    /*
-     * TODO: how to handle RX/TX interrupts?
-     */
+#ifdef CONFIG_VM_VIRTIO_CON
+    const int irq_source = mini_uart_get_irq_source(dev);
+    ZF_LOGD("mini-UART IRQ source: %i", irq_source);
 
-    const int source = mini_uart_get_irq_source(dev);
-    ZF_LOGD("mini-UART interrupt source: %i", source);
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
 
-    if (source == MU_RXD_INTERRUPT) {
-        //mini_uart_enable_rx_irq(dev);
-        ZF_LOGD("Unhandled RXE interrupt");
-    } else if (source == MU_TXE_INTERRUPT) {
-        ZF_LOGD("Unhandled TXE interrupt");
+    if ((regs->mu_iir & MU_IIR_PENDING) ||
+        (irq_source == MU_NO_INTERRUPTS)) {
+
+        /* No more interrupts pending */
+        return;
+    } else {
+
+        /* Interrupts pending
+         *
+         * TODO: how to handle RX/TX interrupts?
+         *
+         * Should received data be buffered to some
+         * receive buffer? The RX FIFO only holds
+         * 8 symbols before being overrun. Currently
+         * it seems that re-enabling RXD irq is required
+         * for correct operation? Also read LSR to clear
+         * possible RX overrun bit.
+         *
+         * For TXE interrupt, feed data to TX FIFO
+         * from transmit buffer until buffer is empty?
+         * Currently there is nothing else to do than
+         * just disable TXE interrupt.
+         */
+
+        if (irq_source == MU_RXD_INTERRUPT) {
+
+            ZF_LOGD("mini-UART RXD interrupt");
+            mini_uart_enable_rx_irq(dev);
+            (void)regs->mu_lsr;
+
+        } else if (irq_source == MU_TXE_INTERRUPT) {
+
+            ZF_LOGD("mini-UART TXE interrupt");
+            mini_uart_disable_tx_irq(dev);
+        }
     }
+#endif
 }
 
 int mini_uart_init(const struct dev_defn *defn,
@@ -394,10 +513,11 @@ int mini_uart_init(const struct dev_defn *defn,
 {
     /* Attempt to map the virtual address, assure this works */
     void *vaddr = chardev_map(defn, ops);
-    memset(dev, 0, sizeof(*dev));
     if (vaddr == NULL) {
         return -ENOMEM;
     }
+
+    memset(dev, 0, sizeof(*dev));
 
     // When mapping the virtual address space, the base addresses need to be
     // 4k byte aligned. Since the real base addresses of the UART peripherals
@@ -410,7 +530,6 @@ int mini_uart_init(const struct dev_defn *defn,
     default:
         ZF_LOGE("Mini UART with ID %d does not exist!", defn->id);
         return -EINVAL;
-        break;
     }
 
     /* Set up all the  device properties. */
@@ -450,21 +569,39 @@ int mini_uart_init(const struct dev_defn *defn,
         return ret;
     }
 
-    /* Set databits to 8 and ensure DLAB == 0 */
-    regs->mu_lcr |= MU_LCR_DATASIZE;
-    regs->mu_lcr &= ~MU_LCR_DLAB;
-
-    /* Enable again */
-    ret = mini_uart_enable(dev, &aux);
-    if (ret != 0) {
-        ZF_LOGE("Failed to enable mini-UART! %i", ret);
-        return ret;
-    }
-
     /* Flush FIFO buffers */
     ret = mini_uart_flush_fifos(dev);
     if (ret != 0) {
         ZF_LOGE("Failed to flush mini-UART FIFOs! %i", ret);
+        return ret;
+    }
+
+    /* Set databits to 8,
+     * clear BREAK bit from LCR,
+     * clear RX_OVERRUN bit from LSR,
+     * ensure DLAB == 0
+     */
+    uint32_t lcr = regs->mu_lcr;
+    MU_SET_BITS_MASK(lcr, MU_LCR_DATASZ_8B);
+    MU_CLEAR_BITS_MASK(lcr, (MU_LCR_BREAK | MU_LCR_DLAB));
+    regs->mu_lcr = lcr;
+
+    /* RX overrun bit is cleared on register read */
+    (void)regs->mu_lsr;
+
+#ifdef CONFIG_VM_VIRTIO_CON
+    /* Enable RX interrupt */
+    ret = mini_uart_enable_rx_irq(dev);
+    if (ret != 0) {
+        ZF_LOGE("Failed to enable mini-UART RXD interrupt! %i", ret);
+        return ret;
+    }
+#endif
+
+    /* Enable RX/TX */
+    ret = mini_uart_enable(dev, &aux);
+    if (ret != 0) {
+        ZF_LOGE("Failed to enable mini-UART! %i", ret);
         return ret;
     }
 
@@ -484,7 +621,11 @@ int mini_uart_getchar(ps_chardevice_t *d)
         return mini_uart_getchar_blocking(d);
     }
 #else
+#ifdef CONFIG_VM_VIRTIO_CON
     return mini_uart_getchar_nonblocking(d);
+#else
+    return mini_uart_getchar_blocking(d);
+#endif
 #endif
 }
 

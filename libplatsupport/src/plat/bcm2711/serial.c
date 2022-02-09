@@ -108,7 +108,6 @@ int uart_gpio_configure(enum chardev_id id, const ps_io_ops_t *o)
     default:
         ZF_LOGD("No pin configuration required!");
         return 0;
-        break;
     }
 
     if (tx_pin < 0 || rx_pin < 0) {
@@ -165,7 +164,7 @@ int uart_init(const struct dev_defn *defn,
     }
 
     int ret = uart_gpio_configure(defn->id, ops);
-    if (0 != ret) {
+    if (ret != 0) {
         ZF_LOGF("UART GPIO configuration failed. %i", ret);
         return -1;
     }
