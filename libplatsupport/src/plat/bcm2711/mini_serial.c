@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021, Hensoldt Cyber GmbH
+ * Copyright 2022, Technology Innovation Institute
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -8,10 +9,107 @@
 #include <stdint.h>
 #include <string.h>
 #include <platsupport/serial.h>
+#include <platsupport/plat/aux.h>
 #include <platsupport/plat/serial.h>
+#include <arm_vm/gen_config.h>
 #include "serial.h"
 #include "mini_serial.h"
 
+/*
+ * The Raspberry Pi's mini-UART/AUX UART has some shenanigans
+ * going on as the TRM is not correct on many parts. The UART
+ * device works essentially the same as on BCM2837/BCM2835, so
+ * the same erratas apply here.
+ *
+ * See following resources for details:
+ *     BCM2711 TRM, Section 2.2. Mini UART.
+ *     https://elinux.org/BCM2835_datasheet_errata
+ *     https://elinux.org/RPi_Hardware
+ */
+
+/* BCM2711 TRM page 17. Interrupt ID definitions. */
+enum mu_iir_source {
+    MU_NO_INTERRUPTS = 0, /* No interrupts pending. */
+    MU_TXE_INTERRUPT = 1, /* TX FIFO empty causing interrupt. */
+    MU_RXD_INTERRUPT = 2  /* RX FIFO data received causing interrupt. */
+};
+
+/* BCM2711 TRM pages 20-21. Auto-flow-control RTS threshold definitions. */
+enum mu_cntl_flow_level {
+    FIFO_3B_LEFT = 0,  /* RTS de-asserted when RX FIFO has 3 bytes left. */
+    FIFO_2B_LEFT = 1,  /* RTS de-asserted when RX FIFO has 2 bytes left. */
+    FIFO_1B_LEFT = 2,  /* RTS de-asserted when RX FIFO has 1 bytes left. */
+    FIFO_4B_LEFT = 3   /* RTS de-asserted when RX FIFO has 4 bytes left. */
+};
+
+/* Helpers */
+#define MU_SET_BITS_MASK(word, bitmask)   (word |= bitmask)
+#define MU_CLEAR_BITS_MASK(word, bitmask) (word &= ~bitmask)
+#define MU_GET_BITS_MASK(word, bitmask)   (word & bitmask)
+
+#define MU_FIFO_SIZE          (8) /* 8-byte FIFOs for RX & TX. */
+
+#define MU_IO_DATA_MASK       MASK(8) /* IO register data bits mask. (Bits 7:0). */
+
+/* BCM2711 TRM has errors regarding IER register.
+ * In order to receive interrupts, bits 3 and 2 must
+ * be written to 1, this is mentioned in BCM2835 peripherals
+ * document. Because BCM2711 mini-UART is essentially the same
+ * as in earlier Raspberries, the same applies. */
+#define MU_IER_RXD_IRQ        BIT(0) /* Interrupt if RX FIFO holds at least 1 byte. */
+#define MU_IER_TXE_IRQ        BIT(1) /* Interrupt if TX FIFO is empty. */
+#define MU_IER_LSI_IRQ        BIT(2) /* RX Line Status Interrupt on overrun/parity/framing errors etc. */
+#define MU_IER_MSI_IRQ        BIT(3) /* Modem Status Interrupt on changing states to either: To Send(CTS), Data Set Ready(DSR). */
+#define MU_IER_RXD_ENA_MASK   (BIT(3) | BIT(2) | BIT(0))
+#define MU_IER_TXE_ENA_MASK   (BIT(3) | BIT(2) | BIT(1))
+
+#define MU_IIR_PENDING        BIT(0) /* This bit is clear if there is an interrupt pending. */
+#define MU_IIR_SOURCE_MASK    (MASK(3) & ~BIT(0)) /* Interrupt source bits mask. (Bits 2:1). */
+#define MU_IIR_SOURCE_SHIFT   (1)
+#define MU_IIR_RXF_CLEAR      BIT(1) /* RX FIFO clear. */
+#define MU_IIR_TXF_CLEAR      BIT(2) /* TX FIFO clear. */
+
+#define MU_LCR_DATASZ_7B      (0x0)  /* Bits 1:0 == 00 -> 7-bit mode. */
+#define MU_LCR_DATASZ_8B      (0x3)  /* Bits 1:0 == 11 -> 8-bit mode. */
+#define MU_LCR_BREAK          BIT(6) /* This bit is set if TX line is pulled low for at least 12 bit times. (Break condition).*/
+#define MU_LCR_DLAB           BIT(7) /* DLAB access bit. */
+
+#define MU_MCR_RTS            BIT(1) /* 0 -> RTS is high, 1 -> RTS is low. */
+
+#define MU_LSR_RXF_DATAREADY  BIT(0) /* This bit is set when RX FIFO holds at least one byte. */
+#define MU_LSR_RX_OVERRUN     BIT(1) /* This bit is set when RX FIFO was overrun. */
+#define MU_LSR_TXF_HASSPACE   BIT(5) /* This bit is set if the TX FIFO can accept at least one byte.*/
+#define MU_LSR_TXIDLE         BIT(6) /* This bit is set if the TX FIFO is empty and the TX is idle. (Finished shifting out the last bit). */
+
+#define MU_MSR_CTS            BIT(5) /* 0 -> CTS is high, 1 -> CTS is low. */
+
+#define MU_CNTL_RXE           BIT(0) /* Receiver (RX) enable. */
+#define MU_CNTL_TXE           BIT(1) /* Transmitter (TX) enable. */
+#define MU_CNTL_RTSEN         BIT(2) /* 1 -> RTS line will de-assert if RX FIFO reaches auto-flow level, 0 -> RTS is controlled by the AUX_MU_MCR_REG register bit 1. */
+#define MU_CNTL_CTSEN         BIT(3) /* 1 -> TX will stop when CTS line is de-asserted, 0 -> CTS line is ignored. */
+#define MU_CNTL_RTS_LVL_MASK  (MASK(5) & ~MASK(3)) /* RTS auto-flow-control bits, specifies the # of bytes left in RX FIFO until RTS is de-asserted. */
+#define MU_CNTL_RTS_LVL_SHIFT (3)
+#define MU_CNTL_RTS_INV       BIT(6) /* 1 -> RTS auto flow assert level is low, 0 -> RTS auto flow assert level is high. */
+#define MU_CNTL_CTS_INV       BIT(7) /* 1 -> CTS auto flow assert level is low, 0 -> CTS auto flow assert level is high. */
+
+#define MU_STAT_RXF_DATAREADY BIT(0) /* This bit is set when RX FIFO holds at least one byte. */
+#define MU_STAT_TXF_HASSPACE  BIT(1) /* This bit is set if the TX FIFO can accept at least one byte.*/
+#define MU_STAT_RXIDLE        BIT(2) /* This bit is set if the receiver is at idle. */
+#define MU_STAT_TXIDLE        BIT(3) /* This bit is set if the transmitter is at idle. */
+#define MU_STAT_RX_OVERRUN    BIT(4) /* This bit is set when RX FIFO was overrun. */
+#define MU_STAT_TXF_FULL      BIT(5) /* Inverse of bit 1. This bit is set if TX FIFO is completely full. */
+#define MU_STAT_RTS           BIT(6) /* RTS line status. */
+#define MU_STAT_CTS           BIT(7) /* CTS line status. */
+#define MU_STAT_TXF_EMPTY     BIT(8) /* This bit is set if TX FIFO is completely empty (can accept 8 bytes). */
+#define MU_STAT_TXDONE        BIT(9) /* This bit is set if TX FIFO is completely empty and the transmitter is at idle. (AND of bits 3 & 8). */
+#define MU_STAT_RXF_LVL_MASK  ((MASK(20) & ~MASK(16))) /* # of bytes in RX FIFO. (0..8). */
+#define MU_STAT_RXF_LVL_SHIFT (16)
+#define MU_STAT_TXF_LVL_MASK  ((MASK(28) & ~MASK(24))) /* # of bytes in TX FIFO. (0..8). */
+#define MU_STAT_TXF_LVL_SHIFT (24)
+
+#define MU_BAUD_BAUD_MASK     MASK(16) /* 16-bits baudrate value. */
+
+/* Mini-UART registers definition. */
 typedef volatile struct mini_uart_regs_s {
     uint32_t mu_io;         // 0x40: mini UART I/O Data
     uint32_t mu_ier;        // 0x44: mini UART interrupt enable
@@ -27,20 +125,386 @@ typedef volatile struct mini_uart_regs_s {
 }
 mini_uart_regs_t;
 
-/* This bit is set if the transmit FIFO can accept at least one byte.*/
-#define MU_LSR_TXEMPTY   BIT(5)
-/* This bit is set if the transmit FIFO is empty and the
- * transmitter is idle. (Finished shifting out the last bit). */
-#define MU_LSR_TXIDLE    BIT(6)
-#define MU_LSR_RXOVERRUN BIT(1)
-#define MU_LSR_DATAREADY BIT(0)
+static aux_sys_t aux;
 
-#define MU_LCR_DLAB      BIT(7)
-#define MU_LCR_BREAK     BIT(6)
-#define MU_LCR_DATASIZE  BIT(0)
+static inline mini_uart_regs_t *mini_uart_get_priv(ps_chardevice_t *dev)
+{
+    return ((mini_uart_regs_t *)dev->vaddr);
+}
+
+static inline int mini_uart_flush_fifos(ps_chardevice_t *dev)
+{
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t iir = regs->mu_iir;
+
+    MU_SET_BITS_MASK(iir, (MU_IIR_RXF_CLEAR | MU_IIR_TXF_CLEAR));
+
+    regs->mu_iir = iir;
+
+    return 0;
+}
+
+static inline int mini_uart_enable(ps_chardevice_t *dev, aux_sys_t *aux)
+{
+    if (dev == NULL ||
+        aux == NULL) {
+        return -EINVAL;
+    }
+
+    int ret = 0;
+
+    /* Enable in AUX block if necessary */
+    ret = aux->status(aux, BCM2711_AUX_UART);
+
+    if (ret != 1) {
+
+        // Not enabled
+        ret = aux->enable(aux, BCM2711_AUX_UART);
+
+        if (ret != 0) {
+            ZF_LOGE("Failed to enable mini-UART in AUX subsystem! %i", ret);
+            return ret;
+        }
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t cntl = regs->mu_cntl;
+
+    MU_SET_BITS_MASK(cntl, (MU_CNTL_RXE | MU_CNTL_TXE));
+
+    regs->mu_cntl = cntl;
+
+    return 0;
+}
+
+static inline int mini_uart_disable(ps_chardevice_t *dev, aux_sys_t *aux, bool disable_aux)
+{
+    if (dev == NULL ||
+        aux == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t cntl = regs->mu_cntl;
+
+    MU_CLEAR_BITS_MASK(cntl, (MU_CNTL_RXE | MU_CNTL_TXE));
+
+    regs->mu_cntl = cntl;
+
+    int ret = 0;
+
+    /* Warning!
+     * Disabling mini-UART in AUX block
+     * disables ALL register access! Nothing
+     * can read or write to the peripheral
+     * registers if it is disabled in AUX block.
+     */
+    if (disable_aux) {
+
+        ret = aux->disable(aux, BCM2711_AUX_UART);
+
+        if (ret != 0) {
+            ZF_LOGE("Failed to disable mini-UART in AUX subsystem! %i", ret);
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
+static inline int mini_uart_enable_rx_irq(ps_chardevice_t *dev)
+{
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t ier = regs->mu_ier;
+
+    MU_SET_BITS_MASK(ier, MU_IER_RXD_ENA_MASK);
+
+    regs->mu_ier = ier;
+
+    return 0;
+}
+
+static inline int mini_uart_disable_rx_irq(ps_chardevice_t *dev)
+{
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t ier = regs->mu_ier;
+
+    /* If TXE is set, clear only RXD bit.
+     * Clearing also bits 3:2 would disturb
+     * receiving TXE interrupts.
+     *
+     * Otherwise, disable also bits 3:2 */
+    if (ier & MU_IER_TXE_IRQ) {
+        MU_CLEAR_BITS_MASK(ier, MU_IER_RXD_IRQ);
+    } else {
+        MU_CLEAR_BITS_MASK(ier, MU_IER_RXD_ENA_MASK);
+    }
+
+    regs->mu_ier = ier;
+
+    return 0;
+}
+
+static inline int mini_uart_enable_tx_irq(ps_chardevice_t *dev)
+{
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t ier = regs->mu_ier;
+
+    MU_SET_BITS_MASK(ier, MU_IER_TXE_ENA_MASK);
+
+    regs->mu_ier = ier;
+
+    return 0;
+}
+
+static inline int mini_uart_disable_tx_irq(ps_chardevice_t *dev)
+{
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t ier = regs->mu_ier;
+
+    /* If RXD is set, clear only TXE bit.
+     * Clearing also bits 3:2 would disturb
+     * receiving RXD interrupts.
+     *
+     * Otherwise, disable also bits 3:2 */
+    if (ier & MU_IER_RXD_IRQ) {
+        MU_CLEAR_BITS_MASK(ier, MU_IER_TXE_IRQ);
+    } else {
+        MU_CLEAR_BITS_MASK(ier, MU_IER_TXE_ENA_MASK);
+    }
+
+    regs->mu_ier = ier;
+
+    return 0;
+}
+
+static inline int mini_uart_disable_interrupts(ps_chardevice_t *dev)
+{
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t ier = regs->mu_ier;
+
+    MU_CLEAR_BITS_MASK(ier, (MU_IER_TXE_ENA_MASK | MU_IER_RXD_IRQ));
+
+    regs->mu_ier = ier;
+
+    return 0;
+}
+
+static inline int mini_uart_get_irq_source(ps_chardevice_t *dev)
+{
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t iir = regs->mu_iir;
+
+    return (int)(MU_GET_BITS_MASK(iir, MU_IIR_SOURCE_MASK) >> MU_IIR_SOURCE_SHIFT);
+}
+
+static inline int mini_uart_rxfifo_level(ps_chardevice_t *dev)
+{
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t stat = regs->mu_stat;
+
+    return (int)(MU_GET_BITS_MASK(stat, MU_STAT_RXF_LVL_MASK) >> MU_STAT_RXF_LVL_SHIFT);
+}
+
+static inline int mini_uart_txfifo_level(ps_chardevice_t *dev)
+{
+    if (dev == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+    uint32_t stat = regs->mu_stat;
+
+    return (int)(MU_GET_BITS_MASK(stat, MU_STAT_TXF_LVL_MASK) >> MU_STAT_TXF_LVL_SHIFT);
+}
+
+
+static int mini_uart_putchar_blocking(ps_chardevice_t *d, int c)
+{
+    if (d == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(d);
+
+    int slots_required = 1;
+    bool print_cr = false;
+    bool complete = false;
+
+    if ((d->flags & SERIAL_AUTO_CR) && (c == '\n')) {
+        slots_required = 2;
+        print_cr = true;
+    }
+
+    do {
+        int slots_avail = (MU_FIFO_SIZE - mini_uart_txfifo_level(d));
+
+        if (slots_avail >= slots_required) {
+
+            regs->mu_io = (uint32_t)c;
+
+            if (print_cr) {
+                regs->mu_io = (uint32_t)'\r';
+            }
+
+            complete = true;
+        }
+    } while (!complete);
+
+    return 0;
+}
+
+static int mini_uart_putchar_nonblocking(ps_chardevice_t *d, int c)
+{
+    if (d == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(d);
+
+    int slots_required = 1;
+    bool print_cr = false;
+
+    if ((d->flags & SERIAL_AUTO_CR) && (c == '\n')) {
+        slots_required = 2;
+        print_cr = true;
+    }
+
+    int slots_avail = (MU_FIFO_SIZE - mini_uart_txfifo_level(d));
+
+    if (slots_avail < slots_required) {
+        return EOF;
+    } else {
+
+        regs->mu_io = (uint32_t)c;
+
+        if (print_cr) {
+            regs->mu_io = (uint32_t)'\r';
+        }
+    }
+
+    return 0;
+}
+
+static int mini_uart_getchar_blocking(ps_chardevice_t *d)
+{
+    if (d == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(d);
+
+    /* Busy-wait until symbol arrives */
+    while (1) {
+
+        if (regs->mu_stat & MU_STAT_RXF_DATAREADY) {
+
+            /* RX FIFO has at least 1 symbol */
+            return (int)(regs->mu_io & MU_IO_DATA_MASK);
+        }
+    }
+
+    return EOF;
+}
+
+static int mini_uart_getchar_nonblocking(ps_chardevice_t *d)
+{
+    if (d == NULL) {
+        return -EINVAL;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(d);
+
+    if (regs->mu_stat & MU_STAT_RXF_DATAREADY) {
+
+        /* RX FIFO has at least 1 symbol */
+        return (int)(regs->mu_io & MU_IO_DATA_MASK);
+    }
+
+    return EOF;
+}
 
 static void mini_uart_handle_irq(ps_chardevice_t *dev)
 {
+    if (dev == NULL) {
+        return;
+    }
+
+#ifdef CONFIG_VM_VIRTIO_CON
+    const int irq_source = mini_uart_get_irq_source(dev);
+    ZF_LOGD("mini-UART IRQ source: %i", irq_source);
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+
+    if ((regs->mu_iir & MU_IIR_PENDING) ||
+        (irq_source == MU_NO_INTERRUPTS)) {
+
+        /* No more interrupts pending */
+        return;
+    } else {
+
+        /* Interrupts pending
+         *
+         * TODO: how to handle RX/TX interrupts?
+         *
+         * Should received data be buffered to some
+         * receive buffer? The RX FIFO only holds
+         * 8 symbols before being overrun. Currently
+         * it seems that re-enabling RXD irq is required
+         * for correct operation? Also read LSR to clear
+         * possible RX overrun bit.
+         *
+         * For TXE interrupt, feed data to TX FIFO
+         * from transmit buffer until buffer is empty?
+         * Currently there is nothing else to do than
+         * just disable TXE interrupt.
+         */
+
+        if (irq_source == MU_RXD_INTERRUPT) {
+
+            ZF_LOGD("mini-UART RXD interrupt");
+            mini_uart_enable_rx_irq(dev);
+            (void)regs->mu_lsr;
+
+        } else if (irq_source == MU_TXE_INTERRUPT) {
+
+            ZF_LOGD("mini-UART TXE interrupt");
+            mini_uart_disable_tx_irq(dev);
+        }
+    }
+#endif
 }
 
 int mini_uart_init(const struct dev_defn *defn,
@@ -49,10 +513,11 @@ int mini_uart_init(const struct dev_defn *defn,
 {
     /* Attempt to map the virtual address, assure this works */
     void *vaddr = chardev_map(defn, ops);
-    memset(dev, 0, sizeof(*dev));
     if (vaddr == NULL) {
-        return -1;
+        return -ENOMEM;
     }
+
+    memset(dev, 0, sizeof(*dev));
 
     // When mapping the virtual address space, the base addresses need to be
     // 4k byte aligned. Since the real base addresses of the UART peripherals
@@ -64,8 +529,7 @@ int mini_uart_init(const struct dev_defn *defn,
         break;
     default:
         ZF_LOGE("Mini UART with ID %d does not exist!", defn->id);
-        return -1;
-        break;
+        return -EINVAL;
     }
 
     /* Set up all the  device properties. */
@@ -78,19 +542,106 @@ int mini_uart_init(const struct dev_defn *defn,
     dev->ioops      = *ops;
     dev->flags      = SERIAL_AUTO_CR;
 
+    int ret = 0;
+
+    /* Initialize AUX subsystem handle
+     *
+     * NOTE: current system limits the smallest shareable
+     * (untyped) MMIO region to 4K page, which is too large
+     * to separate between the AUX MMIO range and mini-UART
+     * range (0x40 bytes between the registers).
+     *
+     * Therefore we must share our MMIO mapping with the AUX
+     * subsystem.
+     */
+    ret = bcm2711_aux_sys_init_ext(vaddr, &aux);
+    if (ret != 0) {
+        ZF_LOGE("Failed to initialize AUX subsystem! %i", ret);
+        return ret;
+    }
+
+    mini_uart_regs_t *regs = mini_uart_get_priv(dev);
+
+    /* Disable RX/TX */
+    ret = mini_uart_disable(dev, &aux, false);
+    if (ret != 0) {
+        ZF_LOGE("Failed to disable mini-UART! %i", ret);
+        return ret;
+    }
+
+    /* Flush FIFO buffers */
+    ret = mini_uart_flush_fifos(dev);
+    if (ret != 0) {
+        ZF_LOGE("Failed to flush mini-UART FIFOs! %i", ret);
+        return ret;
+    }
+
+    /* Set databits to 8,
+     * clear BREAK bit from LCR,
+     * clear RX_OVERRUN bit from LSR,
+     * ensure DLAB == 0
+     */
+    uint32_t lcr = regs->mu_lcr;
+    MU_SET_BITS_MASK(lcr, MU_LCR_DATASZ_8B);
+    MU_CLEAR_BITS_MASK(lcr, (MU_LCR_BREAK | MU_LCR_DLAB));
+    regs->mu_lcr = lcr;
+
+    /* RX overrun bit is cleared on register read */
+    (void)regs->mu_lsr;
+
+#ifdef CONFIG_VM_VIRTIO_CON
+    /* Enable RX interrupt */
+    ret = mini_uart_enable_rx_irq(dev);
+    if (ret != 0) {
+        ZF_LOGE("Failed to enable mini-UART RXD interrupt! %i", ret);
+        return ret;
+    }
+#endif
+
+    /* Enable RX/TX */
+    ret = mini_uart_enable(dev, &aux);
+    if (ret != 0) {
+        ZF_LOGE("Failed to enable mini-UART! %i", ret);
+        return ret;
+    }
+
     return 0;
 }
 
 int mini_uart_getchar(ps_chardevice_t *d)
 {
-    while (!((mini_uart_regs_t *)d->vaddr)->mu_lsr & MU_LSR_DATAREADY);
-    return ((mini_uart_regs_t *)d->vaddr)->mu_io;
+    if (d == NULL) {
+        return -EINVAL;
+    }
+
+#if 0
+    if (d->flags & SERIAL_RX_NONBLOCKING) {
+        return mini_uart_getchar_nonblocking(d);
+    } else {
+        return mini_uart_getchar_blocking(d);
+    }
+#else
+#ifdef CONFIG_VM_VIRTIO_CON
+    return mini_uart_getchar_nonblocking(d);
+#else
+    return mini_uart_getchar_blocking(d);
+#endif
+#endif
 }
 
 int mini_uart_putchar(ps_chardevice_t *d, int c)
 {
-    while (!((mini_uart_regs_t *)d->vaddr)->mu_lsr & MU_LSR_TXIDLE);
-    ((mini_uart_regs_t *)d->vaddr)->mu_io = (c & 0xff);
+    if (d == NULL) {
+        return -EINVAL;
+    }
 
-    return 0;
+#if 0
+    if (d->flags & SERIAL_TX_NONBLOCKING) {
+        return mini_uart_putchar_nonblocking(d, c);
+    } else {
+        return mini_uart_putchar_blocking(d, c);
+    }
+#else
+    return mini_uart_putchar_blocking(d, c);
+#endif
 }
