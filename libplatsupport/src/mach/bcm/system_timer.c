@@ -99,7 +99,6 @@ static void bcm_system_timer_handle_irq(void *data,
                                         ps_irq_acknowledge_fn_t acknowledge_fn,
                                         void *ack_data)
 {
-    /* FIXME: locking? */
     if (!data) {
         ZF_LOGF("No IRQ data");
         return;
@@ -117,8 +116,6 @@ static void bcm_system_timer_handle_irq(void *data,
 
     if (timer->callback) {
         timer->callback(timer->callback_token, LTIMER_TIMEOUT_EVENT);
-    } else {
-        ZF_LOGF("timer callback not set");
     }
 
     ZF_LOGF_IF(acknowledge_fn(ack_data), "failed to acknowledge IRQ");
