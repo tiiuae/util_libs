@@ -22,4 +22,5 @@ set(LINK_WITH_TRUSTED_STORAGE  OFF CACHE BOOL "Don't link mbed TLS library to tr
 # Used by ./library/CMakeLists.txt
 set(libs ${libs} muslc)
 
-# WIP: add custom config for mbedtls, default likely doesn't work.
+# WIP: Custom configuration, don't know if this works without testing
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_CONFIG_FILE='<config-sel4.h>'")
