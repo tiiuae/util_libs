@@ -1,0 +1,42 @@
+diff --git a/configure b/configure
+index c27d6a8..893cfff 100755
+--- a/configure
++++ b/configure
+@@ -24608,7 +24608,6 @@ esac
+ #   gettimeofday - not in mingw
+ #   mmap - not in mingw, djgpp
+ #   nl_langinfo - X/Open standard only, not in djgpp for instance
+-#   obstack_vprintf - glibc specific
+ #   processor_info - solaris specific
+ #   pstat_getprocessor - HPUX specific (10.x and up)
+ #   raise - an ANSI-ism, though probably almost universal by now
+@@ -24627,7 +24626,7 @@ esac
+ # __gmp_replacement_vsnprintf which is not required on AIX since it has a
+ # vsnprintf.
+ #
+-for ac_func in alarm attr_get clock cputime getpagesize getrusage gettimeofday getsysinfo localeconv memset mmap mprotect nl_langinfo obstack_vprintf popen processor_info pstat_getprocessor raise read_real_time sigaction sigaltstack sigstack syssgi strchr strerror strnlen strtol strtoul sysconf sysctl sysctlbyname times
++for ac_func in alarm attr_get clock cputime getpagesize getrusage gettimeofday getsysinfo localeconv memset mmap mprotect nl_langinfo popen processor_info pstat_getprocessor raise read_real_time sigaction sigaltstack sigstack syssgi strchr strerror strnlen strtol strtoul sysconf sysctl sysctlbyname times
+ do :
+   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+diff --git a/configure.ac b/configure.ac
+index cafdb3c..94c5b4d 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -2908,7 +2908,6 @@ GMP_C_DOUBLE_FORMAT
+ #   gettimeofday - not in mingw
+ #   mmap - not in mingw, djgpp
+ #   nl_langinfo - X/Open standard only, not in djgpp for instance
+-#   obstack_vprintf - glibc specific
+ #   processor_info - solaris specific
+ #   pstat_getprocessor - HPUX specific (10.x and up)
+ #   raise - an ANSI-ism, though probably almost universal by now
+@@ -2927,7 +2926,7 @@ GMP_C_DOUBLE_FORMAT
+ # __gmp_replacement_vsnprintf which is not required on AIX since it has a
+ # vsnprintf.
+ #
+-AC_CHECK_FUNCS(alarm attr_get clock cputime getpagesize getrusage gettimeofday getsysinfo localeconv memset mmap mprotect nl_langinfo obstack_vprintf popen processor_info pstat_getprocessor raise read_real_time sigaction sigaltstack sigstack syssgi strchr strerror strnlen strtol strtoul sysconf sysctl sysctlbyname times)
++AC_CHECK_FUNCS(alarm attr_get clock cputime getpagesize getrusage gettimeofday getsysinfo localeconv memset mmap mprotect nl_langinfo popen processor_info pstat_getprocessor raise read_real_time sigaction sigaltstack sigstack syssgi strchr strerror strnlen strtol strtoul sysconf sysctl sysctlbyname times)
+ 
+ # clock_gettime is in librt on *-*-osf5.1 and on glibc, so att -lrt to
+ # TUNE_LIBS if needed. On linux (tested on x86_32, 2.6.26),
