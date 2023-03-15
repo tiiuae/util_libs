@@ -62,6 +62,29 @@ int list_remove_all(list_t *l);
  */
 int list_destroy(list_t *l);
 
+/* Returns the data pointed to by first item. */
+void *list_peek(list_t *l);
+
+/* Returns the data pointed to by item in given position, 
+ * or NULL if item in given position didn't exist.
+ */
+void *list_peek_idx(list_t *l, int idx);
+
+/* Returns the data pointed to by first item and removes the item from the list. */
+void *list_pop(list_t *l);
+
+/* Returns the data pointed to by item in given position and removes the
+ * item from the list, or NULL if item in given position didn't exist.
+ */
+void *list_pop_idx(list_t *l, int idx);
+
+/* Returns the data pointed to by last item and removes the item from the list. */
+void *list_tail(list_t *l);
+
+/* Sorts the list with quicksort. Takes a compare function as a parameter,
+ * which takes 2 data pointers as arguments to do the comparison. */
+void list_qsort(list_t *l, int (*cmp)(const void *, const void *));
+
 /* Below various equivalents of operations above are provided, but that take a
  * caller-constructed node. The purpose of these is to allow you to
  * stack-/statically-allocate nodes when you have no dynamic memory.

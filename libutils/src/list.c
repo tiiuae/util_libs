@@ -177,3 +177,204 @@ int list_remove_all_nodes(list_t *l)
     l->head = NULL;
     return 0;
 }
+
+void *list_peek(list_t *l)
+{
+    assert(l != NULL);
+    return (l->head->data);
+}
+
+void *list_peek_idx(list_t *l, int idx)
+{
+    assert(l != NULL);
+
+    int i = 0;
+    node_t *node = l->head;
+
+    for ( ; node != NULL; node = node->next, i++) {
+        if (i == idx) {
+            break;
+        }
+    }
+
+    return (node != NULL ? node->data : NULL);
+}
+
+void *list_pop(list_t *l)
+{
+    assert(l != NULL);
+    void *data = NULL;
+    node_t *node = l->head;
+
+    if (node != NULL) {
+        l->head = node->next;
+        node->next = NULL;
+
+        data = node->data;
+        free(node);
+    }
+
+    return data;
+}
+
+void *list_pop_idx(list_t *l, int idx)
+{
+    assert(l != NULL);
+
+    void *data = NULL;
+    node_t *node = l->head;
+    node_t *prev = node;
+    int i = 0;
+
+    for (; node != NULL; prev = node, node = node->next, i++) {
+        if (i == idx) {
+            if (prev == NULL) {
+                /* Removing the list head. */
+                l->head = node->next;
+                node->next = NULL;
+            } else {
+                prev->next = node->next;
+                node->next = NULL;
+            }
+            break;
+        }
+    }
+
+    if (node != NULL) {
+        data = node->data;
+        free(node);
+    }
+
+    return data;
+}
+
+void *list_tail(list_t *l)
+{
+    void *data = NULL;
+    node_t *node = l->head;
+    node_t *prev = node;
+
+    /* Wind to the end of the list */
+    for (; node->next != NULL; prev = node, node = node->next);
+
+    /* Remove last item */
+    prev->next = NULL;
+
+    if (node != NULL) {
+        data = node->data;
+        free(node);
+    }
+
+    return data;
+}
+
+
+/* Sort the list and return a pointer to the tail node */
+static node_t *qsort_list(node_t **head, int (*cmp)(const void *, const void *)) 
+{
+    /* Sanity check that list exists */
+    if (head == NULL) {
+        return NULL;
+    }
+
+    /* Basic cases: empty list and single node */
+    if ((*head) == NULL) {
+        return NULL;
+    }
+    if ((*head)->next == NULL) {
+        return (*head);
+    }
+
+    /* Partition the list into 3 sublists using first node (== *head) as pivot. 
+     * 
+     * The left_front/left_right sublist is for nodes, for which the "cmp" 
+     * function returns <0, and the right_front/right_tail sublist is for nodes, 
+     * for which the "cmp" function returns >0. 
+     * 
+     * The pivot/pivot_front list is for nodes, for which the "cmp"
+     * function returned 0, meaning they are equal. Equal nodes are
+     * prepended before the pivot node. */
+
+    /* First node is the pivot */
+    node_t *pivot       = (*head);
+    node_t *pivot_front = pivot;
+    node_t *left_front  = NULL;
+    node_t *left_tail   = NULL;
+    node_t *right_front = NULL;
+    node_t *right_tail  = NULL;
+
+    /* Start from the node after pivot */
+    node_t *curr_node   = (*head)->next;
+
+    /* Pivot's next field must be reset, otherwise
+     * the list will eventually link to itself. */
+    pivot->next = NULL;
+
+    while (curr_node != NULL) {
+
+        node_t *next_node = curr_node->next;
+        int rc = cmp((const void *)curr_node->data, (const void *)pivot->data);
+
+        /* Prepending to the list is faster than appening */
+        if (rc == 0) {
+            curr_node->next = pivot_front;
+            pivot_front = curr_node;
+        } else if (rc < 0) {
+            curr_node->next = left_front;
+            left_front = curr_node;
+        } else {
+            curr_node->next = right_front;
+            right_front = curr_node;
+        }
+
+        curr_node = next_node;
+    }
+
+    /* Sort split lists recursively if needed.
+     * Then, join the lists:
+     * {left_front, left_tail} + {pivot_front, pivot_tail} + {right_front, right_tail} 
+     */
+    if (left_front != NULL) {
+
+        /* Sort left sublist recursively */
+        left_tail = qsort_list(&left_front, cmp);
+        
+        /* Join left to pivot */
+        left_tail->next = pivot_front;
+
+        /* Update original lists' head */
+        (*head) = left_front;
+    } else {
+        /* Left sublist was empty. 
+         * Update original lists' head  */
+        (*head) = pivot_front;
+    }
+
+    if (right_front != NULL) {
+
+        /* Sort right sublist recursively */
+        right_tail = qsort_list(&right_front, cmp);
+
+        /* Join pivot to right */
+        pivot->next = right_front;
+    } else {
+        /* Right sublist was empty.
+         * Tail node is the pivot */
+        right_tail = pivot;
+    }
+
+    /* Terminate the joined list */
+    right_tail->next = NULL;
+
+    /* Return the tail of the new list */
+    return right_tail;
+}
+
+
+void list_qsort(list_t *l, int (*cmp)(const void *, const void *)) 
+{
+    assert(l != NULL);
+
+    node_t **head = &(l->head);
+    qsort_list(head, cmp);
+}
